@@ -3,6 +3,7 @@ import { Swatch } from "@/components/ui/swatch";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { ProofCard } from "@/components/proof-card";
+import { ThemeToggle } from "@/components/theme-toggle";
 import type { ProofCardProps } from "@/lib/proof";
 
 export const metadata = {
@@ -95,14 +96,17 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export default function StyleguidePage() {
   return (
     <main className="mx-auto max-w-content px-6 py-16">
-      <header className="pb-8">
-        <h1 className="font-display text-display-xl text-ink">
-          Pressroom styleguide
-        </h1>
-        <p className="mt-2 font-ui text-body text-ink-2">
-          Internal reference for the Pressroom design system. Not linked from the
-          app.
-        </p>
+      <header className="flex items-start justify-between gap-4 pb-8">
+        <div>
+          <h1 className="font-display text-display-xl text-ink">
+            Pressroom styleguide
+          </h1>
+          <p className="mt-2 font-ui text-body text-ink-2">
+            Internal reference for the Pressroom design system. Not linked from
+            the app.
+          </p>
+        </div>
+        <ThemeToggle />
       </header>
 
       <Section title="Palette">
