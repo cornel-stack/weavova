@@ -1,6 +1,56 @@
 @import "tailwindcss";
 
+/* ===========================================================================
+   Pressroom colour tokens — values from constitution v1.1.2 Principle IV.
+   Token NAMES are stable across themes; values switch by [data-theme].
+   In Ink: --paper = canvas, --card = card, --sunken = raised.
+   =========================================================================== */
+
+:root,
+[data-theme="daylight"] {
+  --paper: #f4f1e8;
+  --card: #fefdf8;
+  --sunken: #e9e5d6;
+  --ink: #1c1714;
+  --ink-2: #595046;
+  --ink-3: #968b79;
+  --hairline: #e4dac8;
+  --rule: #cdc1ab;
+  --persimmon: #b5443c;
+  --persimmon-deep: #8f342e;
+  --persimmon-tint: #f5dfd8;
+  --on-accent: #ffffff;
+  --success: #2e6b43;
+  --success-tint: #e3ede3;
+  --warning: #b7791f;
+  --warning-tint: #f4ebd7;
+  --danger: #b0331f;
+  --danger-tint: #f3ded8;
+}
+
+[data-theme="ink"] {
+  --paper: #15120e; /* canvas */
+  --card: #1f1b15;
+  --sunken: #2a251d; /* raised */
+  --ink: #f4eee2;
+  --ink-2: #b4ab99;
+  --ink-3: #7b7363;
+  --hairline: #322b20;
+  --rule: #463d2d;
+  --persimmon: #ca5f51;
+  --persimmon-deep: var(--persimmon); /* omitted in dark — bright persimmon is text-safe */
+  --persimmon-tint: #3a261f;
+  --on-accent: #ffffff;
+  --success: #5fb572;
+  --success-tint: #293424;
+  --warning: #e3a53a;
+  --warning-tint: #3e311b;
+  --danger: #ee7a63;
+  --danger-tint: #402a21;
+}
+
 body {
-  background: #f7f2e8;
+  background: var(--paper);
+  color: var(--ink);
   font-family: var(--font-ui);
 }
