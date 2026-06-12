@@ -111,3 +111,46 @@ body {
   /* motion */
   --ease-pressroom: cubic-bezier(0.2, 0, 0, 1);
 }
+
+/* ===========================================================================
+   Type scale (constitution v1.1.2). Sizes/line-heights only; apply the family
+   utility (font-display / font-ui / font-mono) alongside per the role.
+   =========================================================================== */
+
+@theme {
+  --text-display-2xl: 48px;
+  --text-display-2xl--line-height: 52px;
+  --text-display-xl: 38px;
+  --text-display-xl--line-height: 44px;
+  --text-display-lg: 30px;
+  --text-display-lg--line-height: 36px;
+  --text-display-md: 24px;
+  --text-display-md--line-height: 30px;
+  --text-display-sm: 20px;
+  --text-display-sm--line-height: 26px;
+  --text-display-xs: 18px;
+  --text-display-xs--line-height: 24px;
+
+  --text-heading-lg: 20px;
+  --text-heading-lg--line-height: 28px;
+  --text-heading-md: 16px;
+  --text-heading-md--line-height: 22px;
+  --text-heading-sm: 14px;
+  --text-heading-sm--line-height: 20px;
+
+  --text-quote: 22px;
+  --text-quote--line-height: 32px;
+
+  --text-body: 15px;
+  --text-body--line-height: 24px;
+  --text-body-sm: 13px;
+  --text-body-sm--line-height: 20px;
+
+  --text-label: 11px;
+  --text-label--line-height: 16px;
+
+  --text-mono: 12px;
+  --text-mono--line-height: 18px;
+  --text-mono-sm: 11px;
+  --text-mono-sm--line-height: 16px;
+}
