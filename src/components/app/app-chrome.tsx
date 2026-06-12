@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AppRail } from "./app-rail";
 import { AppTopBar } from "./app-top-bar";
+import { CommandPalette } from "./command-palette";
 
 export type ChromeUser = { name: string; initials: string; email?: string };
 export type ChromeWorkspace = { name: string; slug: string };
@@ -52,6 +53,8 @@ export function AppChrome({ user, workspace, children }: Props) {
 
         <main className="min-w-0 flex-1">{children}</main>
       </div>
+
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
 
       {/* mobile rail drawer (a derivation — the reference is desktop) */}
       {drawerOpen && (
