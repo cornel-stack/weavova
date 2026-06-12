@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Swatch } from "@/components/ui/swatch";
+import { Button } from "@/components/ui/button";
 
 export const metadata = {
   title: "Styleguide — Weavova",
@@ -93,7 +94,18 @@ export default function StyleguidePage() {
           ))}
         </div>
       </Section>
-      <Section title="Buttons">{null}</Section>
+      <Section title="Buttons">
+        <div className="flex flex-wrap items-center gap-4">
+          <Button variant="primary">Make clip</Button>
+          <Button variant="strong">Review</Button>
+          <Button variant="quiet">Cancel</Button>
+          <Button variant="danger">Revoke consent</Button>
+        </div>
+        <p className="mt-4 font-ui text-body-sm text-ink-2">
+          Persimmon appears on the primary action only; strong secondary is solid
+          ink, quiet is an ink-hairline outline, danger is destructive.
+        </p>
+      </Section>
       <Section title="Consent chips">{null}</Section>
       <Section title="ProofCard">{null}</Section>
     </main>
