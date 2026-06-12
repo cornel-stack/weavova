@@ -1,5 +1,6 @@
 @import "tailwindcss";
 
 body {
+  background: #f7f2e8;
   font-family: var(--font-ui);
 }
