@@ -184,5 +184,5 @@ keyboard-accessible, passes its acceptance criteria, builds green.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/T0.2-design-system/plan.md` (active slice: T0.2 — Pressroom design system).
+`specs/T0.3-schema-fixtures/plan.md` (active slice: T0.3 — Schema & fixtures).
 <!-- SPECKIT END -->
