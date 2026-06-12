@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { AppRail } from "./app-rail";
+import { AppTopBar } from "./app-top-bar";
 
 export type ChromeUser = { name: string; initials: string; email?: string };
 export type ChromeWorkspace = { name: string; slug: string };
@@ -37,22 +38,12 @@ export function AppChrome({ user, workspace, children }: Props) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* top-bar region — replaced by <AppTopBar /> in T008 */}
-        <header className="flex h-14 items-center gap-4 border-b border-hairline bg-card px-5">
-          <span className="font-ui text-body-sm text-ink-2">
-            {workspace.name}
-          </span>
-          <button
-            type="button"
-            aria-expanded={paletteOpen}
-            onClick={() => setPaletteOpen(true)}
-            className="ml-auto inline-flex items-center gap-2 rounded-control border border-rule px-3 py-1.5 font-ui text-body-sm text-ink-3 hover:bg-sunken"
-          >
-            Search or jump…
-            <kbd className="font-mono text-mono-sm">⌘K</kbd>
-          </button>
-          <span className="font-ui text-body-sm text-ink-2">{user.name}</span>
-        </header>
+        <AppTopBar
+          workspace={workspace}
+          user={user}
+          paletteOpen={paletteOpen}
+          onOpenPalette={() => setPaletteOpen(true)}
+        />
 
         <main className="min-w-0 flex-1">{children}</main>
       </div>
