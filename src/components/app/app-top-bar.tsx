@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronsUpDown, Search } from "lucide-react";
+import { ChevronsUpDown, Menu, Search } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { ChromeUser, ChromeWorkspace } from "./app-chrome";
 
@@ -12,6 +12,7 @@ export function AppTopBar({
   user,
   paletteOpen,
   onOpenPalette,
+  onOpenDrawer,
   workspaceTrigger,
   userTrigger,
 }: {
@@ -19,6 +20,7 @@ export function AppTopBar({
   user: ChromeUser;
   paletteOpen: boolean;
   onOpenPalette: () => void;
+  onOpenDrawer: () => void;
   workspaceTrigger?: React.ReactNode;
   userTrigger?: React.ReactNode;
 }) {
@@ -26,6 +28,16 @@ export function AppTopBar({
 
   return (
     <header className="flex h-14 items-center gap-3 border-b border-hairline bg-card px-4">
+      {/* mobile: open the rail drawer */}
+      <button
+        type="button"
+        onClick={onOpenDrawer}
+        aria-label="Open navigation"
+        className="inline-flex size-8 items-center justify-center rounded-control text-ink-2 hover:bg-sunken md:hidden"
+      >
+        <Menu className="size-5" strokeWidth={1.5} aria-hidden />
+      </button>
+
       {/* workspace block → switcher (T013 supplies the interactive trigger) */}
       {workspaceTrigger ?? (
         <span className="flex items-center gap-2 rounded-control px-2 py-1.5">
