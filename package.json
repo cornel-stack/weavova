@@ -9,7 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "node --env-file=.env.local src/db/migrate.ts",
     "db:seed": "node --env-file=.env.local src/db/seed.ts"
   },
   "dependencies": {
