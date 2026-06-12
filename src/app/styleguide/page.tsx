@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Swatch } from "@/components/ui/swatch";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 
 export const metadata = {
   title: "Styleguide — Weavova",
@@ -106,7 +107,13 @@ export default function StyleguidePage() {
           ink, quiet is an ink-hairline outline, danger is destructive.
         </p>
       </Section>
-      <Section title="Consent chips">{null}</Section>
+      <Section title="Consent chips">
+        <div className="flex flex-wrap items-center gap-4">
+          <Chip tone="success">Granted</Chip>
+          <Chip tone="warning">Awaiting</Chip>
+          <Chip tone="danger">Revoked</Chip>
+        </div>
+      </Section>
       <Section title="ProofCard">{null}</Section>
     </main>
   );
