@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
+import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -34,8 +35,19 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${fraunces.variable} ${hankenGrotesk.variable} ${jetBrainsMono.variable}`}
+      suppressHydrationWarning
     >
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <ThemeProvider
+          attribute="data-theme"
+          defaultTheme="daylight"
+          themes={["daylight", "ink"]}
+          enableSystem={false}
+          disableTransitionOnChange
+        >
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   );
 }
