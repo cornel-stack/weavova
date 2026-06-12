@@ -54,3 +54,60 @@ body {
   color: var(--ink);
   font-family: var(--font-ui);
 }
+
+/* ===========================================================================
+   Map tokens into the Tailwind v4 theme.
+   `inline` so colour/font utilities resolve the runtime (theme-dependent) var.
+   =========================================================================== */
+
+@theme inline {
+  /* colours → bg-, text-, border- utilities */
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-sunken: var(--sunken);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-hairline: var(--hairline);
+  --color-rule: var(--rule);
+  --color-persimmon: var(--persimmon);
+  --color-persimmon-deep: var(--persimmon-deep);
+  --color-persimmon-tint: var(--persimmon-tint);
+  --color-on-accent: var(--on-accent);
+  --color-success: var(--success);
+  --color-success-tint: var(--success-tint);
+  --color-warning: var(--warning);
+  --color-warning-tint: var(--warning-tint);
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
+
+  /* font families (next/font vars applied on <html>) */
+  --font-display: var(--font-display);
+  --font-ui: var(--font-ui);
+  --font-mono: var(--font-mono);
+}
+
+@theme {
+  /* radii */
+  --radius-pill: 999px;
+  --radius-control: 8px;
+  --radius-clip: 6px;
+  --radius-modal: 14px;
+
+  /* widths → max-w-content / max-w-reading */
+  --container-content: 1240px;
+  --container-reading: 680px;
+
+  /* breakpoints — 480 / 1024 / 1280 */
+  --breakpoint-sm: 480px;
+  --breakpoint-md: 1024px;
+  --breakpoint-lg: 1280px;
+
+  /* elevation — soft single-direction shadows (rgba(28,23,20) = ink) */
+  --shadow-clip: 2px 3px 10px -4px rgba(28, 23, 20, 0.14);
+  --shadow-lift: 6px 10px 26px -10px rgba(28, 23, 20, 0.26);
+  --shadow-modal: 10px 18px 50px -16px rgba(28, 23, 20, 0.34);
+
+  /* motion */
+  --ease-pressroom: cubic-bezier(0.2, 0, 0, 1);
+}
