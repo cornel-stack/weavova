@@ -1,9 +1,13 @@
 import {
   boolean,
+  index,
+  integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -77,3 +81,34 @@ export const proof = pgTable("proof", {
     .notNull()
     .defaultNow(),
 });
+
+// The consent gate (Principle VII): versioned, revocable, cascade-ready.
+// Rows are append-only versions per proof; the effective consent is the latest
+// version (max `version`). Revocation = a new row with state 'revoked' (never a
+// delete), so the history is auditable.
+//
+// `consent.id` is a stable PK. At T2, `derived_asset.consentId` will FK to it so
+// that revoking a proof's consent cascades to withdraw its derived assets. The
+// (proofId, version) uniqueness + the (proofId, version desc) index make the
+// latest-version lookup and that future cascade expressible without reshaping.
+export const consent = pgTable(
+  "consent",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    proofId: uuid("proof_id")
+      .notNull()
+      .references(() => proof.id, { onDelete: "cascade" }),
+    state: consentStateEnum("state").notNull(),
+    grantedAt: timestamp("granted_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    version: integer("version").notNull(),
+    captureContext: jsonb("capture_context"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("consent_proof_version_unique").on(t.proofId, t.version),
+    index("consent_proof_version_idx").on(t.proofId, t.version.desc()),
+  ],
+);
