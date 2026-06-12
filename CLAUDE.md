@@ -65,8 +65,11 @@ hot persimmon accent used like an inked stamp, tactile not flat. The chrome is q
 `warning #B7791F` · `danger #B0331F`
 
 **Colours — Ink (dark)**
-`canvas #15120E` · `card #1F1B15` · `raised #2A251D` · `hairline #322B20` · `ink #F4EEE2` ·
-`ink-2 #B4AB99` · `persimmon #FF6A3D` · `persimmon-tint #3A2014`
+`canvas #15120E` · `card #1F1B15` · `raised #2A251D` · `hairline #322B20` · `rule #463D2D` ·
+`ink #F4EEE2` · `ink-2 #B4AB99` · `ink-3 #7B7363` · `persimmon #FF6A3D` · `persimmon-tint #3A2014` ·
+`success #5FB572` · `warning #E3A53A` · `danger #EE7A63`
+(persimmon-deep is intentionally omitted in dark: bright persimmon `#FF6A3D` is already text-safe
+on the dark canvas, so no separate deep variant is needed.)
 
 **Type**
 - Display + customer quotes: **Fraunces** (characterful old-style serif) → `--font-display`

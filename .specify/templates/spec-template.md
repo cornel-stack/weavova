@@ -117,6 +117,29 @@
 - **SC-003**: [User satisfaction metric, e.g., "90% of users successfully complete primary task on first attempt"]
 - **SC-004**: [Business metric, e.g., "Reduce support tickets related to [X] by 50%"]
 
+## Constitution Alignment *(mandatory)*
+
+<!--
+  ACTION REQUIRED: Confirm this spec is consistent with .specify/memory/constitution.md (v1.0.1).
+  Keep this product-level (no implementation detail). Address each item; write N/A where a
+  principle does not apply to this slice and say why.
+-->
+
+- **Customer is the headline (P-II)**: which surfaces in this spec show proof, and how does the
+  real customer face / verbatim quote stay the largest, warmest element?
+- **Port, don't redesign (P-V)**: name the `/design-reference` screen(s) this slice is ported
+  from. If the design does not cover a required state, raise it as a [NEEDS CLARIFICATION] instead
+  of inventing a layout (P-XII).
+- **Fixtures-first (P-VI)**: this slice is built and demonstrated on fixtures shaped exactly like
+  the real schema; the fixture shape is the schema contract.
+- **Consent (P-VII)**: if proof or any derived asset is involved, state that consent is visible,
+  versioned, and revocable, and that revocation cascades — no clip from non-consented proof.
+- **No editor (P-VIII)**: if a studio/format surface is in scope, confirm it is a format picker,
+  not a timeline/track/scrubber.
+- **Scope (P-IX, P-XI)**: this is a single vertical slice within the current tier; no speculative
+  features beyond it.
+- **Microcopy (P-XI)**: product copy avoids "amazing"/"awesome" and emoji.
+
 ## Assumptions
 
 <!--

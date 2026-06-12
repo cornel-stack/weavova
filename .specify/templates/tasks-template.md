@@ -147,16 +147,34 @@ Examples of foundational tasks (adjust based on your project):
 
 ---
 
-## Phase N: Polish & Cross-Cutting Concerns
+## Phase N: Polish, Cross-Cutting Concerns & Definition of Done
 
-**Purpose**: Improvements that affect multiple user stories
+**Purpose**: Improvements that affect multiple user stories, plus the constitution-mandated
+per-slice gates (see `.specify/memory/constitution.md` v1.0.1, Governance → Definition of Done).
 
-- [ ] TXXX [P] Documentation updates in docs/
-- [ ] TXXX Code cleanup and refactoring
-- [ ] TXXX Performance optimization across all stories
-- [ ] TXXX [P] Additional unit tests (if requested) in tests/unit/
-- [ ] TXXX Security hardening
+**Constitution-driven tasks** (include the ones that apply to this slice):
+
+- [ ] TXXX [P] Port-fidelity pass: components match the named `/design-reference` screen(s); no
+      reinvented layout or restyle (P-V)
+- [ ] TXXX [P] Pressroom token audit: only on-token colour/type/radii/spacing/motion; persimmon
+      ONLY on the primary action and the "verified real customer" mark (P-IV)
+- [ ] TXXX "Customer is the headline" check: on every proof surface the real face / verbatim quote
+      is the largest, warmest element; chrome stays quiet (P-II)
+- [ ] TXXX Empty / loading / error / render-in-progress states implemented for each surface
+- [ ] TXXX Responsive at the `480 / 1024 / 1280` breakpoints
+- [ ] TXXX Keyboard accessibility pass (focus order, shortcuts, ⌘K where applicable)
+- [ ] TXXX Consent enforcement verified: revocation cascades to derived assets; no clip generated
+      from proof lacking consent (P-VII) — *if proof/assets are in scope*
+- [ ] TXXX Microcopy review: no "amazing"/"awesome", no emoji in product copy (P-XI)
+- [ ] TXXX [P] Documentation updates (not in `/docs` or `/design-reference`, which are read-only)
+- [ ] TXXX Code cleanup and refactoring (TS strict: no `any`, no unjustified `@ts-ignore`)
+- [ ] TXXX `npm run lint` and `npm run build` green
 - [ ] TXXX Run quickstart.md validation
+
+**Definition of done (slice is complete only when ALL hold):** renders on real data (fixtures in
+Phase 1) · handles empty / loading / error · responsive to the breakpoints · matches the Pressroom
+tokens exactly · keyboard-accessible · passes its acceptance criteria · builds green. Then **STOP
+and report**; do not advance to the next slice or tier until the human says to proceed (P-IX).
 
 ---
 

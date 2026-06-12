@@ -40,7 +40,32 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Confirm this plan complies with `.specify/memory/constitution.md` (v1.0.1). Each gate below maps to
+a binding principle; mark PASS / FAIL / N/A and justify any FAIL in Complexity Tracking.
+
+- [ ] **Customer is the headline (P-II)**: every proof surface in this plan makes the real
+      customer face or verbatim quote the largest, warmest element; app chrome stays quiet.
+- [ ] **Locked stack (P-III)**: uses only Next.js 15 / React 19 / TS strict, Tailwind v4, Auth.js
+      (NOT Supabase Auth), Neon + Drizzle, R2, Inngest, Resend. No new dependency without an
+      explicit proposal. Heavy render stays off Vercel (stubbed → sample clip until T8).
+- [ ] **Pressroom tokens (P-IV)**: only on-token colour/type/radii/spacing/motion; persimmon used
+      ONLY on the primary action and the "verified real customer" mark.
+- [ ] **Port, don't redesign (P-V)**: components are ported faithfully from `/design-reference`;
+      no reinvented layouts or restyling. Names the reference screen(s) this slice ports.
+- [ ] **Fixtures-first (P-VI)**: builds against fixtures shaped exactly like the real schema; the
+      fixture shape is the schema contract; schema is written before the screens that read it.
+- [ ] **Consent enforcement (P-VII)**: consent is visible, versioned, revocable; revocation
+      cascades to derived assets; no clip is generated from proof lacking consent.
+- [ ] **No editor (P-VIII)**: the clip studio is a format picker — no timeline, track, or scrubber.
+- [ ] **SDD scope (P-IX, P-XI)**: one vertical slice only; no speculative/"while I'm here" work;
+      stays within the current tier (T0–T10) sequence.
+- [ ] **Ambiguity handling (P-XII)**: open questions are raised against a named `/design-reference`
+      screen rather than guessed.
+
+**Definition of done (P-Governance)** — this slice must, before it is considered complete: render
+on real data (fixtures in Phase 1); handle empty / loading / error states; be responsive to the
+`480 / 1024 / 1280` breakpoints; match the Pressroom tokens exactly; be keyboard-accessible; pass
+its acceptance criteria; build green.
 
 ## Project Structure
 
