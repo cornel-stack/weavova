@@ -2,10 +2,43 @@ import type { ReactNode } from "react";
 import { Swatch } from "@/components/ui/swatch";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
+import { ProofCard } from "@/components/proof-card";
+import type { ProofCardProps } from "@/lib/proof";
 
 export const metadata = {
   title: "Styleguide — Weavova",
 };
+
+// Hardcoded ProofCard samples (no real people; neutral placeholders).
+const PROOF_SAMPLES: ProofCardProps[] = [
+  {
+    id: "proof_text_1",
+    customerName: "Darnell W.",
+    proofType: "text",
+    quote:
+      "The monthly box is the only subscription I never even think about cancelling.",
+    transcript: null,
+    source: "Stripe",
+    consentState: "granted",
+    capturedAt: "2026-05-28",
+    reviewed: false,
+    verified: true,
+  },
+  {
+    id: "proof_media_1",
+    customerName: "Aisha K.",
+    proofType: "video",
+    quote: null,
+    transcript:
+      "Everyone who walks into my place asks what that smell is. Every single time.",
+    source: "Instagram",
+    consentState: "awaiting",
+    thumbnail: null,
+    capturedAt: "2026-06-02",
+    reviewed: true,
+    verified: false,
+  },
+];
 
 // Palette — token name, bg utility, Daylight hex, Ink hex (constitution v1.1.2).
 const PALETTE: { name: string; swatchClass: string; daylight: string; ink: string }[] = [
@@ -114,7 +147,18 @@ export default function StyleguidePage() {
           <Chip tone="danger">Revoked</Chip>
         </div>
       </Section>
-      <Section title="ProofCard">{null}</Section>
+      <Section title="ProofCard">
+        <p className="mb-6 font-ui text-body-sm text-ink-2">
+          Hover a card to reveal the persimmon “Make” action (granted consent
+          only). The proof — the customer’s words or thumbnail — is the dominant
+          element.
+        </p>
+        <div className="grid grid-cols-1 gap-6 sm:max-w-[760px] md:grid-cols-2">
+          {PROOF_SAMPLES.map((p) => (
+            <ProofCard key={p.id} {...p} />
+          ))}
+        </div>
+      </Section>
     </main>
   );
 }
