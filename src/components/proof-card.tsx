@@ -1,4 +1,4 @@
-import { Play, Store } from "lucide-react";
+import { BadgeCheck, Play, Scissors, Store } from "lucide-react";
 import type { ConsentState, ProofCardProps } from "@/lib/proof";
 
 // Ported from the export's `wv-clip` (design-reference screens 01 Dashboard /
@@ -45,13 +45,24 @@ export function ProofCard(props: ProofCardProps) {
     source,
     consentState,
     capturedAt,
+    reviewed,
+    verified,
   } = props;
 
   const isMedia = proofType !== "text";
   const proofText = isMedia ? transcript : quote;
+  // Never offer to generate a clip from non-consented proof (Principle VII).
+  const canMake = consentState === "granted";
 
   return (
     <article className="group relative flex flex-col gap-4 rounded-clip border border-hairline bg-card p-5 shadow-clip transition-shadow duration-200 ease-pressroom hover:shadow-lift">
+      {/* unreviewed corner stamp */}
+      {!reviewed && (
+        <span className="absolute right-3 top-3 rounded-pill border border-rule px-2 py-0.5 font-mono text-mono-sm uppercase tracking-wide text-ink-3">
+          Unreviewed
+        </span>
+      )}
+
       {/* media proof — thumbnail (neutral placeholder, no real person) */}
       {isMedia && (
         <div className="relative flex aspect-video items-center justify-center rounded-control bg-sunken">
@@ -77,6 +88,12 @@ export function ProofCard(props: ProofCardProps) {
         <span className="font-ui text-body-sm font-medium text-ink">
           {customerName}
         </span>
+        {verified && (
+          <span className="flex items-center text-persimmon" title="Verified real customer">
+            <BadgeCheck className="size-4" strokeWidth={1.5} aria-hidden />
+            <span className="sr-only">Verified real customer</span>
+          </span>
+        )}
         <span className="ml-auto flex items-center gap-1.5 text-ink-3">
           <Store className="size-3.5" strokeWidth={1.5} aria-hidden />
           <span className="font-mono text-mono-sm">{source}</span>
@@ -92,6 +109,17 @@ export function ProofCard(props: ProofCardProps) {
         <span>{CONSENT_LABEL[consentState]}</span>
         <span className="ml-auto">{formatDate(capturedAt)}</span>
       </div>
+
+      {/* persimmon "Make" — revealed on hover/focus, ONLY when consent granted */}
+      {canMake && (
+        <button
+          type="button"
+          className="absolute bottom-5 right-5 inline-flex items-center gap-1.5 rounded-control bg-persimmon px-3 py-1.5 font-ui text-body-sm font-medium text-on-accent opacity-0 transition-opacity duration-200 ease-pressroom hover:bg-persimmon-deep focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink group-hover:opacity-100"
+        >
+          <Scissors className="size-3.5" strokeWidth={1.5} aria-hidden />
+          Make
+        </button>
+      )}
     </article>
   );
 }
