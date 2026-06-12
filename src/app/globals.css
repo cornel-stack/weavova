@@ -154,3 +154,20 @@ body {
   --text-mono-sm: 11px;
   --text-mono-sm--line-height: 16px;
 }
+
+/* ===========================================================================
+   Motion — durations fast 120ms / default 200ms / celebrate <=420ms; the
+   Pressroom ease lives in --ease-pressroom (ease-pressroom utility). Honour
+   reduced-motion: things settle instantly, never animate.
+   =========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
