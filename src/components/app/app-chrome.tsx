@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { AppRail } from "./app-rail";
 
 export type ChromeUser = { name: string; initials: string; email?: string };
 export type ChromeWorkspace = { name: string; slug: string };
@@ -30,11 +31,9 @@ export function AppChrome({ user, workspace, children }: Props) {
 
   return (
     <div className="flex min-h-screen bg-paper text-ink">
-      {/* rail region — replaced by <AppRail /> in T007 */}
+      {/* left rail (desktop) */}
       <aside className="hidden w-60 shrink-0 border-r border-hairline bg-card md:block">
-        <div className="px-5 py-5 font-display text-display-sm text-ink">
-          Weavova
-        </div>
+        <AppRail />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
