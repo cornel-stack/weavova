@@ -1,11 +1,16 @@
-// Props type for the canonical ProofCard. Anticipates the T0.3 `proof` entity;
-// the real schema/fixtures must remain shape-compatible with this (Fixtures-first).
+// Schema is authoritative: ProofType / ConsentState derive from the Postgres
+// enums in src/db/schema.ts (type-only import — erased at build, no DB/Drizzle
+// code reaches any bundle). ProofView is the flattened shape the ProofCard
+// consumes (proof row + resolved source label + effective consent state + ISO
+// capturedAt). ProofCardProps aliases ProofView so the T0.2 ProofCard is unchanged.
 
-export type ProofType = "text" | "video" | "photo" | "audio";
+import type { consentStateEnum, proofTypeEnum } from "@/db/schema";
 
-export type ConsentState = "granted" | "awaiting" | "revoked";
+export type ProofType = (typeof proofTypeEnum)["enumValues"][number];
 
-export interface ProofCardProps {
+export type ConsentState = (typeof consentStateEnum)["enumValues"][number];
+
+export interface ProofView {
   id: string;
   customerName: string;
   proofType: ProofType;
@@ -13,8 +18,9 @@ export interface ProofCardProps {
   quote: string | null;
   /** transcript / caption (media proofs) */
   transcript: string | null;
-  /** capture source, e.g. Shopify, Stripe, Instagram, Calendly, Square */
+  /** capture source label, e.g. Shopify, Stripe, Instagram, Calendly, Square */
   source: string;
+  /** effective (latest-version) consent state */
   consentState: ConsentState;
   /** media reference; a neutral placeholder is used when absent */
   thumbnail?: string | null;
@@ -23,3 +29,5 @@ export interface ProofCardProps {
   reviewed: boolean;
   verified: boolean;
 }
+
+export type ProofCardProps = ProofView;
