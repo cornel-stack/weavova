@@ -169,5 +169,6 @@ keyboard-accessible, passes its acceptance criteria, builds green.
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
+shell commands, and other important information, read the current plan:
+`specs/T0.1-walking-skeleton/plan.md` (active slice: T0.1 — Walking Skeleton).
 <!-- SPECKIT END -->
