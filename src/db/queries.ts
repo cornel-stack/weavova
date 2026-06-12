@@ -1,7 +1,20 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "./client";
-import { consent, proof, source } from "./schema";
+import { consent, proof, source, workspace } from "./schema";
 import type { ConsentState, ProofView } from "@/lib/proof";
+
+export type Workspace = typeof workspace.$inferSelect;
+
+// The seeded demo workspace (oldest row). The session/workspace seam
+// (src/lib/session.ts) wraps this; T6 replaces the seam with real auth.
+export async function getDefaultWorkspace(): Promise<Workspace | null> {
+  const rows = await getDb()
+    .select()
+    .from(workspace)
+    .orderBy(asc(workspace.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
 
 // Effective consent = the latest version's state (correlated subquery). A proof
 // with no consent row yields null → mapped to a non-granted state (fails closed).
