@@ -27,6 +27,25 @@ const PALETTE: { name: string; swatchClass: string; daylight: string; ink: strin
   { name: "danger-tint", swatchClass: "bg-danger-tint", daylight: "#F3DED8", ink: "#402A21" },
 ];
 
+// Type scale — role label, size/family classes, family name, sample.
+const TYPE: { label: string; className: string; family: string; sample: string }[] = [
+  { label: "display-2xl · 48/52", className: "font-display text-display-2xl", family: "Fraunces", sample: "The customer is the headline" },
+  { label: "display-xl · 38/44", className: "font-display text-display-xl", family: "Fraunces", sample: "The customer is the headline" },
+  { label: "display-lg · 30/36", className: "font-display text-display-lg", family: "Fraunces", sample: "The customer is the headline" },
+  { label: "display-md · 24/30", className: "font-display text-display-md", family: "Fraunces", sample: "The customer is the headline" },
+  { label: "display-sm · 20/26", className: "font-display text-display-sm", family: "Fraunces", sample: "The customer is the headline" },
+  { label: "display-xs · 18/24", className: "font-display text-display-xs", family: "Fraunces", sample: "The customer is the headline" },
+  { label: "heading-lg · 20/28", className: "font-ui text-heading-lg font-semibold", family: "Hanken Grotesk", sample: "Proof inbox" },
+  { label: "heading-md · 16/22", className: "font-ui text-heading-md font-semibold", family: "Hanken Grotesk", sample: "Proof inbox" },
+  { label: "heading-sm · 14/20", className: "font-ui text-heading-sm font-semibold", family: "Hanken Grotesk", sample: "Proof inbox" },
+  { label: "quote · 22/32", className: "font-display text-quote", family: "Fraunces", sample: "My whole flat smells like a spa now." },
+  { label: "body · 15/24", className: "font-ui text-body", family: "Hanken Grotesk", sample: "Capture real customer proof the moment it happens." },
+  { label: "body-sm · 13/20", className: "font-ui text-body-sm", family: "Hanken Grotesk", sample: "Capture real customer proof the moment it happens." },
+  { label: "label · 11/16", className: "font-ui text-label uppercase tracking-widest", family: "Hanken Grotesk", sample: "Verified real customer" },
+  { label: "mono · 12/18", className: "font-mono text-mono", family: "JetBrains Mono", sample: "/app/proof/8f3a2c" },
+  { label: "mono-sm · 11/16", className: "font-mono text-mono-sm", family: "JetBrains Mono", sample: "proof_8f3a2c9d" },
+];
+
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="border-t border-hairline py-12">
@@ -62,7 +81,18 @@ export default function StyleguidePage() {
           ))}
         </div>
       </Section>
-      <Section title="Type scale">{null}</Section>
+      <Section title="Type scale">
+        <div className="flex flex-col gap-8">
+          {TYPE.map((t) => (
+            <div key={t.label}>
+              <div className="font-mono text-mono-sm text-ink-3">
+                {t.label} · {t.family}
+              </div>
+              <div className={`mt-1 text-ink ${t.className}`}>{t.sample}</div>
+            </div>
+          ))}
+        </div>
+      </Section>
       <Section title="Buttons">{null}</Section>
       <Section title="Consent chips">{null}</Section>
       <Section title="ProofCard">{null}</Section>
