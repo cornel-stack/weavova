@@ -1,10 +1,34 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.0.0 → 1.0.1
-Rationale: PATCH. Completes the existing Ink (dark) token table (adds ink-3, rule, success,
-warning, danger + persimmon-deep omission note) and syncs the dependent Spec Kit templates to
-this constitution. No new principle; no governance redefinition.
+Version change: 1.1.1 → 1.1.2
+Rationale: PATCH. Adds one type-scale token, `--text-mono-sm` (11 / 16, JetBrains Mono), for dense
+metadata / IDs (11 px mono appears on ~42 screens, nearly as many as 12 px `--text-mono`). No
+colour, principle, or governance change. CLAUDE.md §5 synced.
+
+Prior — 1.1.1 (PATCH): completed existing Principle IV token guidance with exact values reconciled
+from the /design-reference exports: (a) the three elevation tokens (shadow-clip/lift/modal)
+replacing the qualitative "soft single-direction shadow" line; (b) the named type scale (display
+2xl→xs, headings lg/md/sm, quote, body, body-sm, label, mono) with size/line-height/family per
+step. No colour, principle, or governance change. CLAUDE.md §5 and the T0.2 plan's Open Items
+synced.
+
+Prior — 1.1.0 (MINOR): material design-system change — reconciles the Principle IV Daylight colour
+tokens to the /design-reference exports (now the authoritative colour source). Changed Daylight
+values: paper #F7F2E8→#F4F1E8, card #FFFDF7→#FEFDF8, sunken #EFE7D8→#E9E5D6,
+persimmon #EA4A1F→#B5443C, persimmon-deep #BE3A12→#8F342E, persimmon-tint #FBE2D6→#F5DFD8.
+Neutrals (ink/ink-2/ink-3/hairline/rule) and status (success/warning/danger) unchanged (already
+identical across all 66 screens). Added tokens (both palettes): on-accent #FFFFFF; Daylight status
+tints success-tint #E3EDE3, warning-tint #F4EBD7, danger-tint #F3DED8 (from the export); Ink status
+tints success-tint #293424, warning-tint #3E311B, danger-tint #402A21 (16% washes over dark card).
+Ink (dark) changes: dark persimmon #FF6A3D→#CA5F51 and dark persimmon-tint #3A2014→#3A261F, both
+re-derived from the new accent (the export has no dark screens). Recorded the stale-screens
+decision: the 16 peripheral screens (Authentication/Logos/System) on the old warm palette are
+stale; one unified palette governs the app. CLAUDE.md §5 and the T0.2 spec synced. No principle
+added/removed; no governance change.
+
+Prior — 1.0.1 (PATCH): completed the Ink (dark) token table (added ink-3, rule, success,
+warning, danger + persimmon-deep omission note) and synced the dependent Spec Kit templates.
 
 v1.0.0 (initial ratification): first concrete constitution derived from CLAUDE.md, replacing
 the unfilled spec-kit template; added all 12 principles below plus the supporting sections.
@@ -96,20 +120,24 @@ exactly; do not introduce off-token colours, fonts, radii, or motion values.
 
 | Token | Hex |
 |---|---|
-| paper | `#F7F2E8` |
-| card | `#FFFDF7` |
-| sunken | `#EFE7D8` |
+| paper | `#F4F1E8` |
+| card | `#FEFDF8` |
+| sunken | `#E9E5D6` |
 | ink | `#1C1714` |
 | ink-2 | `#595046` |
 | ink-3 | `#968B79` |
 | hairline | `#E4DAC8` |
 | rule | `#CDC1AB` |
-| persimmon (accent) | `#EA4A1F` |
-| persimmon-deep (text-safe) | `#BE3A12` |
-| persimmon-tint | `#FBE2D6` |
+| persimmon (accent) | `#B5443C` |
+| persimmon-deep (text-safe) | `#8F342E` |
+| persimmon-tint | `#F5DFD8` |
+| on-accent | `#FFFFFF` |
 | success | `#2E6B43` |
+| success-tint | `#E3EDE3` |
 | warning | `#B7791F` |
+| warning-tint | `#F4EBD7` |
 | danger | `#B0331F` |
+| danger-tint | `#F3DED8` |
 
 **Colours — Ink (dark)**
 
@@ -123,16 +151,41 @@ exactly; do not introduce off-token colours, fonts, radii, or motion values.
 | ink | `#F4EEE2` | primary text |
 | ink-2 | `#B4AB99` | secondary text |
 | ink-3 | `#7B7363` | tertiary text |
-| persimmon | `#FF6A3D` | accent / "verified real customer" mark (text-safe on canvas) |
-| persimmon-tint | `#3A2014` | accent wash |
+| persimmon | `#CA5F51` | accent / "verified real customer" mark (text-safe on canvas) |
+| persimmon-tint | `#3A261F` | accent wash |
+| on-accent | `#FFFFFF` | text/icon on the persimmon action |
 | success | `#5FB572` | granted, saved, paid |
+| success-tint | `#293424` | success wash (e.g. consent-granted chip background) |
 | warning | `#E3A53A` | caution, awaiting |
+| warning-tint | `#3E311B` | warning wash (e.g. awaiting-consent chip background) |
 | danger | `#EE7A63` | error, consent revoked, destructive |
+| danger-tint | `#402A21` | danger wash (e.g. revoked-consent chip background) |
 
-> **Note — persimmon-deep is intentionally omitted in dark.** The bright persimmon (`#FF6A3D`)
+> **Note — persimmon-deep is intentionally omitted in dark.** The dark persimmon (`#CA5F51`)
 > is already text-safe on the dark canvas, so no separate deep (text-safe) variant is needed; in
-> Daylight, `persimmon-deep #BE3A12` exists only because the brighter accent fails contrast on
+> Daylight, `persimmon-deep #8F342E` exists only because the brighter accent fails contrast on
 > warm paper.
+
+> **Provenance (v1.1.0).** The Daylight colour values above are reconciled directly from the
+> `/design-reference` HTML exports (the screens we port faithfully), which are the authoritative
+> colour source. The neutrals (ink, ink-2, ink-3, hairline, rule) and status colours (success,
+> warning, danger) were already identical across all 66 screens and unchanged. The warm tokens
+> (paper, card, sunken, persimmon, persimmon-deep, persimmon-tint) were updated to the value used
+> by the 50 core/product screens; `persimmon-deep` and `persimmon-tint` are the OKLab evaluations
+> of the export's `color-mix` definitions. `on-accent` (`#FFFFFF`, both themes) and the Daylight
+> status tints (`success-tint #E3EDE3`, `warning-tint #F4EBD7`, `danger-tint #F3DED8`) are taken
+> directly from the export. The design-reference has no dark-theme screens, so the Ink palette is
+> the authored set EXCEPT: (a) the dark `persimmon`, re-derived from the new `#B5443C` (brightened
+> along the same OKLCh path the prior `#EA4A1F`→`#FF6A3D` pair used); (b) the dark `persimmon-tint`
+> (`#3A2014`→`#3A261F`), re-derived to match the new accent; and (c) the dark status tints
+> (`#293424`/`#3E311B`/`#402A21`), each a 16% wash of its dark status colour over the dark card
+> (`#1F1B15`) — the same 16% relationship the Daylight `persimmon-tint` uses over its card.
+>
+> **Stale screens.** The 16 peripheral export screens (Authentication, Logos, System) still carry
+> the older warm palette (`paper #F7F2E8`, `card #FFFDF7`, `sunken #EFE7D8`, `persimmon #EA4A1F`).
+> These are STALE. **One unified palette governs the whole app** — the tokens above. When those
+> screens are ported in later tiers, they conform to these tokens, not to the colours baked into
+> their PNG/HTML exports.
 
 **Type**
 
@@ -140,11 +193,45 @@ exactly; do not introduce off-token colours, fonts, radii, or motion values.
 - UI: **Hanken Grotesk** (humanist grotesque) → `--font-ui`
 - Code / IDs / routes: **JetBrains Mono** → `--font-mono`
 
+Type scale (size / line-height in px, reconciled from `/design-reference` at v1.1.1):
+
+| Role | Token | Size | Line-height | Family |
+|---|---|---|---|---|
+| Display 2xl | `--text-display-2xl` | 48 | 52 | Fraunces |
+| Display xl | `--text-display-xl` | 38 | 44 | Fraunces |
+| Display lg | `--text-display-lg` | 30 | 36 | Fraunces |
+| Display md | `--text-display-md` | 24 | 30 | Fraunces |
+| Display sm | `--text-display-sm` | 20 | 26 | Fraunces |
+| Display xs | `--text-display-xs` | 18 | 24 | Fraunces |
+| Heading lg | `--text-heading-lg` | 20 | 28 | Hanken Grotesk |
+| Heading md | `--text-heading-md` | 16 | 22 | Hanken Grotesk |
+| Heading sm | `--text-heading-sm` | 14 | 20 | Hanken Grotesk |
+| Quote | `--text-quote` | 22 | 32 | Fraunces |
+| Body | `--text-body` | 15 | 24 | Hanken Grotesk |
+| Body sm | `--text-body-sm` | 13 | 20 | Hanken Grotesk |
+| Label | `--text-label` | 11 | 16 | Hanken Grotesk (uppercase, tracked) |
+| Mono | `--text-mono` | 12 | 18 | JetBrains Mono |
+| Mono sm | `--text-mono-sm` | 11 | 16 | JetBrains Mono |
+
+The export sets sizes inline per element (no class-based scale), so each role above is the
+reconciled clean step for its cluster; fractional export sizes (e.g. 22.4 / 14.5 / 11.2 px) are
+render-zoom artifacts rounded to clean integers. Known context spread (not conflicts to resolve):
+hero customer quotes scale up via the Display steps (≈30–34 px), the card quote is `--text-quote`;
+`--text-mono` (12) is the default and `--text-mono-sm` (11) covers dense metadata / IDs (11 px mono
+appears on ~42 screens, nearly as many as 12 px).
+
 **Other tokens**
 
 - Radius: pill `999`, control `8`, clipping (cards) `6`, modal `14`.
 - Spacing: 4px base — `4, 8, 12, 16, 24, 32, 48, 64, 96`.
-- Elevation: soft single-direction shadow. **No gradients, glow, or blur.**
+- Elevation: soft single-direction shadow (named tokens, reconciled from `/design-reference` at
+  v1.1.1; `rgba(28,23,20,…)` = `ink #1C1714`):
+  - `--shadow-clip: 2px 3px 10px -4px rgba(28,23,20,0.14)` — cards / the ProofCard clipping
+  - `--shadow-lift: 6px 10px 26px -10px rgba(28,23,20,0.26)` — hover / lifted
+  - `--shadow-modal: 10px 18px 50px -16px rgba(28,23,20,0.34)` — modals
+  Each is a single soft drop shadow (positive offset, soft blur, negative spread, low-alpha ink) —
+  **no gradients, glow, blur/backdrop, or inset**, consistent with the "soft single-direction"
+  rule.
 - Widths: app content max `1240px`; long-form reading `680px`. Breakpoints `480 / 1024 / 1280`.
 - Motion: fast `120ms` (hover tint), default `200ms`, celebrate `≤420ms`; easing
   `cubic-bezier(0.2,0,0,1)` — things settle, never bounce. Signature: the **press-run** render
@@ -292,4 +379,4 @@ Pressroom tokens exactly; keyboard-accessible; passes its acceptance criteria; b
 `CLAUDE.md` remains the runtime source of truth for project context; this constitution encodes its
 binding rules.
 
-**Version**: 1.0.1 | **Ratified**: 2026-06-12 | **Last Amended**: 2026-06-12
+**Version**: 1.1.2 | **Ratified**: 2026-06-12 | **Last Amended**: 2026-06-13

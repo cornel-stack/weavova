@@ -59,27 +59,41 @@ Concept: a warm, editorial product where **the customer is the headline**. Warm 
 hot persimmon accent used like an inked stamp, tactile not flat. The chrome is quiet; the proof is loud.
 
 **Colours — Daylight (light, default)**
-`paper #F7F2E8` · `card #FFFDF7` · `sunken #EFE7D8` · `ink #1C1714` · `ink-2 #595046` ·
-`ink-3 #968B79` · `hairline #E4DAC8` · `rule #CDC1AB` · `persimmon (accent) #EA4A1F` ·
-`persimmon-deep (text-safe) #BE3A12` · `persimmon-tint #FBE2D6` · `success #2E6B43` ·
-`warning #B7791F` · `danger #B0331F`
+`paper #F4F1E8` · `card #FEFDF8` · `sunken #E9E5D6` · `ink #1C1714` · `ink-2 #595046` ·
+`ink-3 #968B79` · `hairline #E4DAC8` · `rule #CDC1AB` · `persimmon (accent) #B5443C` ·
+`persimmon-deep (text-safe) #8F342E` · `persimmon-tint #F5DFD8` · `on-accent #FFFFFF` ·
+`success #2E6B43` · `success-tint #E3EDE3` · `warning #B7791F` · `warning-tint #F4EBD7` ·
+`danger #B0331F` · `danger-tint #F3DED8`
+(Daylight colours reconciled from `/design-reference` — the authoritative colour source — at
+constitution v1.1.0.)
 
 **Colours — Ink (dark)**
 `canvas #15120E` · `card #1F1B15` · `raised #2A251D` · `hairline #322B20` · `rule #463D2D` ·
-`ink #F4EEE2` · `ink-2 #B4AB99` · `ink-3 #7B7363` · `persimmon #FF6A3D` · `persimmon-tint #3A2014` ·
-`success #5FB572` · `warning #E3A53A` · `danger #EE7A63`
-(persimmon-deep is intentionally omitted in dark: bright persimmon `#FF6A3D` is already text-safe
-on the dark canvas, so no separate deep variant is needed.)
+`ink #F4EEE2` · `ink-2 #B4AB99` · `ink-3 #7B7363` · `persimmon #CA5F51` · `persimmon-tint #3A261F` ·
+`on-accent #FFFFFF` · `success #5FB572` · `success-tint #293424` · `warning #E3A53A` ·
+`warning-tint #3E311B` · `danger #EE7A63` · `danger-tint #402A21`
+(persimmon-deep is intentionally omitted in dark: the dark persimmon `#CA5F51` is already text-safe
+on the dark canvas, so no separate deep variant is needed. At v1.1.0 the dark persimmon and
+persimmon-tint were re-derived from the new Daylight accent `#B5443C`, and the dark status tints are
+16% washes of each status colour over the dark card `#1F1B15`; the export has no dark screens.)
 
 **Type**
 - Display + customer quotes: **Fraunces** (characterful old-style serif) → `--font-display`
 - UI: **Hanken Grotesk** (humanist grotesque) → `--font-ui`
 - Code / IDs / routes: **JetBrains Mono** → `--font-mono`
+- Scale (size/lh px, reconciled from `/design-reference` at v1.1.1): display-2xl `48/52`,
+  display-xl `38/44`, display-lg `30/36`, display-md `24/30`, display-sm `20/26`, display-xs `18/24`
+  (Fraunces) · heading-lg `20/28`, heading-md `16/22`, heading-sm `14/20` (Hanken) · quote `22/32`
+  (Fraunces) · body `15/24`, body-sm `13/20`, label `11/16` uppercase (Hanken) · mono `12/18`,
+  mono-sm `11/16` (JetBrains).
 
 **Other tokens**
 - Radius: pill `999`, control `8`, clipping (cards) `6`, modal `14`.
 - Spacing: 4px base (4, 8, 12, 16, 24, 32, 48, 64, 96).
-- Elevation: soft single-direction shadow. **No gradients, glow, or blur.**
+- Elevation: soft single-direction shadow (named tokens, reconciled at v1.1.1; `rgba(28,23,20)` =
+  ink): `--shadow-clip 2px 3px 10px -4px rgba(28,23,20,.14)` (cards/clipping), `--shadow-lift 6px
+  10px 26px -10px rgba(28,23,20,.26)` (hover), `--shadow-modal 10px 18px 50px -16px
+  rgba(28,23,20,.34)` (modals). **No gradients, glow, blur, or inset.**
 - Widths: app content max `1240px`; long-form reading `680px`. Breakpoints `480 / 1024 / 1280`.
 - Motion: fast `120ms` (hover tint), default `200ms`, celebrate `≤420ms`; easing
   `cubic-bezier(0.2,0,0,1)` — things settle, never bounce. Signature: the **press-run** render
@@ -170,5 +184,5 @@ keyboard-accessible, passes its acceptance criteria, builds green.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/T0.1-walking-skeleton/plan.md` (active slice: T0.1 — Walking Skeleton).
+`specs/T0.2-design-system/plan.md` (active slice: T0.2 — Pressroom design system).
 <!-- SPECKIT END -->
