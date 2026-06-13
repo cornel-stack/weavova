@@ -171,3 +171,96 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* ===========================================================================
+   Command palette (cmdk) — token-styled to match /design-reference screen 14.
+   Colours via theme-reactive var(); radii/shadow/type are the exact Pressroom
+   token values. No persimmon — chrome stays quiet.
+   =========================================================================== */
+
+[cmdk-overlay] {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  /* ink-based scrim (rgba(28,23,20,…)), consistent with the elevation tokens */
+  background: rgba(28, 23, 20, 0.45);
+}
+
+[cmdk-dialog] {
+  position: fixed;
+  z-index: 51;
+  top: 18vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(640px, calc(100vw - 32px));
+}
+
+[cmdk-root] {
+  overflow: hidden;
+  background: var(--card);
+  border: 1px solid var(--hairline);
+  border-radius: 14px; /* --radius-modal */
+  box-shadow: 10px 18px 50px -16px rgba(28, 23, 20, 0.34); /* --shadow-modal */
+  font-family: var(--font-ui);
+}
+
+[cmdk-input] {
+  width: 100%;
+  padding: 16px;
+  font-size: 15px; /* body */
+  line-height: 24px;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  outline: none;
+}
+
+[cmdk-input]::placeholder {
+  color: var(--ink-3);
+}
+
+[cmdk-list] {
+  max-height: 360px;
+  padding: 8px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+[cmdk-group-heading] {
+  padding: 8px 8px 4px;
+  font-size: 11px; /* label */
+  line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+
+[cmdk-item] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px; /* --radius-control */
+  font-size: 13px; /* body-sm */
+  line-height: 20px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+[cmdk-item][aria-selected="true"] {
+  background: var(--sunken);
+  color: var(--ink);
+}
+
+[cmdk-item] svg {
+  flex: none;
+  color: var(--ink-3);
+}
+
+[cmdk-empty] {
+  padding: 24px;
+  font-size: 13px;
+  text-align: center;
+  color: var(--ink-3);
+}
