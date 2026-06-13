@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { AppRail } from "./app-rail";
 import { AppTopBar } from "./app-top-bar";
 import { CommandPalette } from "./command-palette";
+import { UserMenu } from "./user-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
 export type ChromeUser = { name: string; initials: string; email?: string };
@@ -51,6 +52,7 @@ export function AppChrome({ user, workspace, children }: Props) {
           onOpenPalette={() => setPaletteOpen(true)}
           onOpenDrawer={() => setDrawerOpen(true)}
           workspaceTrigger={<WorkspaceSwitcher workspace={workspace} />}
+          userTrigger={<UserMenu user={user} />}
         />
 
         <main className="min-w-0 flex-1">{children}</main>
