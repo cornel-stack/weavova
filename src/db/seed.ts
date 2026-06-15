@@ -51,29 +51,46 @@ const revoked = (grantedAt: string, revokedAt: string): ConsentVersion[] => [
   },
 ];
 
-// ~15 realistic, on-brand fixtures (no lorem; no real identifiable people;
-// neutral placeholders for media). All four proof types, all three consent
-// states, including one granted→revoked.
+// Demo fixture dates are RELATIVE to seed-time now() (A-10) so the dashboard /
+// inbox demo stays alive across reseeds instead of ageing out of the KPI
+// windows: the newest proof is ~hours old, the rest spread back across the last
+// ~30 days, and several land inside the last 7 — so BOTH the "this week" and
+// "this month" windows are populated whenever the seed runs. `now` is captured
+// once at seed runtime; re-running re-anchors every date to the new now().
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
+const NOW = new Date();
+// ISO string for `days` (+ optional `hours`) before seed-time now.
+const ago = (days: number, hours = 0): string =>
+  new Date(NOW.getTime() - days * DAY - hours * HOUR).toISOString();
+
+// 15 realistic, on-brand fixtures (no lorem; no real identifiable people;
+// neutral placeholders for media). Unchanged mix — all four proof types
+// (text 4 / video 4 / photo 4 / audio 3) and all three consent states
+// (granted 10 / awaiting 4 / revoked 1), including one granted→revoked. Only the
+// capture dates changed (now relative — see `ago`); consent timestamps stay
+// chronologically coherent: granted at capture, and the revoked one is revoked
+// after it was granted and before now.
 const FIXTURES: Fixture[] = [
   // text
-  { customerName: "Darnell W.", sourceKind: "stripe", proofType: "text", quote: "The monthly box is the only subscription I never even think about cancelling.", transcript: null, capturedAt: "2026-05-12", reviewed: true, verified: true, consent: granted("2026-05-12") },
-  { customerName: "Priya R.", sourceKind: "calendly", proofType: "text", quote: "Booked the workshop for date night and we're honestly still talking about it.", transcript: null, capturedAt: "2026-05-19", reviewed: false, verified: false, consent: granted("2026-05-19") },
-  { customerName: "Tom B.", sourceKind: "square", proofType: "text", quote: "Picked it up at the market stall as a gift and ended up keeping it for myself.", transcript: null, capturedAt: "2026-05-22", reviewed: false, verified: false, consent: awaiting() },
-  { customerName: "Leo M.", sourceKind: "instagram", proofType: "text", quote: "I almost bought a cheaper one. So glad I didn't — it's still going strong months later.", transcript: null, capturedAt: "2026-04-30", reviewed: true, verified: false, consent: revoked("2026-04-30", "2026-05-15") },
+  { customerName: "Darnell W.", sourceKind: "stripe", proofType: "text", quote: "The monthly box is the only subscription I never even think about cancelling.", transcript: null, capturedAt: ago(11), reviewed: true, verified: true, consent: granted(ago(11)) },
+  { customerName: "Priya R.", sourceKind: "calendly", proofType: "text", quote: "Booked the workshop for date night and we're honestly still talking about it.", transcript: null, capturedAt: ago(5), reviewed: false, verified: false, consent: granted(ago(5)) },
+  { customerName: "Tom B.", sourceKind: "square", proofType: "text", quote: "Picked it up at the market stall as a gift and ended up keeping it for myself.", transcript: null, capturedAt: ago(9), reviewed: false, verified: false, consent: awaiting() },
+  { customerName: "Leo M.", sourceKind: "instagram", proofType: "text", quote: "I almost bought a cheaper one. So glad I didn't — it's still going strong months later.", transcript: null, capturedAt: ago(17), reviewed: true, verified: false, consent: revoked(ago(17), ago(6)) },
   // video
-  { customerName: "Maria L.", sourceKind: "shopify", proofType: "video", quote: null, transcript: "My whole flat smells like a spa now — I've already repurchased three times.", capturedAt: "2026-06-01", reviewed: false, verified: true, consent: granted("2026-06-01") },
-  { customerName: "Aisha K.", sourceKind: "instagram", proofType: "video", quote: null, transcript: "Everyone who walks into my place asks what that smell is. Every single time.", capturedAt: "2026-06-02", reviewed: true, verified: true, consent: granted("2026-06-02") },
-  { customerName: "Sofia D.", sourceKind: "shopify", proofType: "video", quote: null, transcript: "I gave one to my mum and now she texts me every week asking for more.", capturedAt: "2026-05-27", reviewed: false, verified: false, consent: awaiting() },
-  { customerName: "Marcus T.", sourceKind: "stripe", proofType: "video", quote: null, transcript: "Lit it during a rough week and it genuinely made the evenings feel calmer.", capturedAt: "2026-05-30", reviewed: true, verified: false, consent: granted("2026-05-30") },
+  { customerName: "Maria L.", sourceKind: "shopify", proofType: "video", quote: null, transcript: "My whole flat smells like a spa now — I've already repurchased three times.", capturedAt: ago(0, 4), reviewed: false, verified: true, consent: granted(ago(0, 4)) },
+  { customerName: "Aisha K.", sourceKind: "instagram", proofType: "video", quote: null, transcript: "Everyone who walks into my place asks what that smell is. Every single time.", capturedAt: ago(1), reviewed: true, verified: true, consent: granted(ago(1)) },
+  { customerName: "Sofia D.", sourceKind: "shopify", proofType: "video", quote: null, transcript: "I gave one to my mum and now she texts me every week asking for more.", capturedAt: ago(8), reviewed: false, verified: false, consent: awaiting() },
+  { customerName: "Marcus T.", sourceKind: "stripe", proofType: "video", quote: null, transcript: "Lit it during a rough week and it genuinely made the evenings feel calmer.", capturedAt: ago(13), reviewed: true, verified: false, consent: granted(ago(13)) },
   // photo
-  { customerName: "Hannah P.", sourceKind: "square", proofType: "photo", quote: null, transcript: "Set it up on the windowsill and the whole corner finally feels like mine.", capturedAt: "2026-06-03", reviewed: false, verified: true, consent: granted("2026-06-03") },
-  { customerName: "Diego R.", sourceKind: "shopify", proofType: "photo", quote: null, transcript: "Unboxed it on the kitchen table — the packaging alone got a photo.", capturedAt: "2026-05-24", reviewed: false, verified: false, consent: awaiting() },
-  { customerName: "Yuki N.", sourceKind: "instagram", proofType: "photo", quote: null, transcript: "Three of them on the shelf now. Might be a problem. A good problem.", capturedAt: "2026-06-04", reviewed: true, verified: false, consent: granted("2026-06-04") },
-  { customerName: "Caleb W.", sourceKind: "square", proofType: "photo", quote: null, transcript: "Bought it for the scent, stayed for how the whole room looks now.", capturedAt: "2026-05-18", reviewed: false, verified: false, consent: granted("2026-05-18") },
+  { customerName: "Hannah P.", sourceKind: "square", proofType: "photo", quote: null, transcript: "Set it up on the windowsill and the whole corner finally feels like mine.", capturedAt: ago(2), reviewed: false, verified: true, consent: granted(ago(2)) },
+  { customerName: "Diego R.", sourceKind: "shopify", proofType: "photo", quote: null, transcript: "Unboxed it on the kitchen table — the packaging alone got a photo.", capturedAt: ago(19), reviewed: false, verified: false, consent: awaiting() },
+  { customerName: "Yuki N.", sourceKind: "instagram", proofType: "photo", quote: null, transcript: "Three of them on the shelf now. Might be a problem. A good problem.", capturedAt: ago(6), reviewed: true, verified: false, consent: granted(ago(6)) },
+  { customerName: "Caleb W.", sourceKind: "square", proofType: "photo", quote: null, transcript: "Bought it for the scent, stayed for how the whole room looks now.", capturedAt: ago(24), reviewed: false, verified: false, consent: granted(ago(24)) },
   // audio
-  { customerName: "Greta S.", sourceKind: "calendly", proofType: "audio", quote: null, transcript: "Honestly the calmest, happiest evening I've had in months. I'm already booking the next one.", capturedAt: "2026-06-05", reviewed: false, verified: true, consent: granted("2026-06-05") },
-  { customerName: "Owen B.", sourceKind: "stripe", proofType: "audio", quote: null, transcript: "Left this as a quick voice note because typing wouldn't do it justice — it's that good.", capturedAt: "2026-05-26", reviewed: false, verified: false, consent: awaiting() },
-  { customerName: "Nadia F.", sourceKind: "shopify", proofType: "audio", quote: null, transcript: "My partner keeps stealing them for his office. I've started hiding a spare.", capturedAt: "2026-05-21", reviewed: true, verified: false, consent: granted("2026-05-21") },
+  { customerName: "Greta S.", sourceKind: "calendly", proofType: "audio", quote: null, transcript: "Honestly the calmest, happiest evening I've had in months. I'm already booking the next one.", capturedAt: ago(4), reviewed: false, verified: true, consent: granted(ago(4)) },
+  { customerName: "Owen B.", sourceKind: "stripe", proofType: "audio", quote: null, transcript: "Left this as a quick voice note because typing wouldn't do it justice — it's that good.", capturedAt: ago(22), reviewed: false, verified: false, consent: awaiting() },
+  { customerName: "Nadia F.", sourceKind: "shopify", proofType: "audio", quote: null, transcript: "My partner keeps stealing them for his office. I've started hiding a spare.", capturedAt: ago(28), reviewed: true, verified: false, consent: granted(ago(28)) },
 ];
 
 const CAPTURE_CONTEXT = {
