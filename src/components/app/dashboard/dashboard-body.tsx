@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ProofCard } from "@/components/proof-card";
 import { getDashboardSummary } from "@/db/queries";
 import { getSession } from "@/lib/session";
@@ -43,12 +44,12 @@ export async function DashboardBody({ workspaceId }: { workspaceId: string }) {
                 <h2 className="font-ui text-label uppercase tracking-wide text-ink-3">
                   Recent proof
                 </h2>
-                <a
+                <Link
                   href="/app/proof"
                   className="font-ui text-body-sm text-ink-2 underline-offset-4 transition-colors duration-200 ease-pressroom hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
                 >
                   View all in the inbox →
-                </a>
+                </Link>
               </div>
               <div className="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3">
                 {summary.recentProof.map((p) => (

@@ -1,4 +1,4 @@
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "./client";
 import { withDbRetry } from "./with-retry";
 import { consent, proof, source, workspace } from "./schema";
@@ -75,23 +75,42 @@ function toView(row: ProofRow): ProofView {
   };
 }
 
-export async function getProofs(): Promise<ProofView[]> {
-  const rows = await getDb()
-    .select(proofColumns)
-    .from(proof)
-    .innerJoin(source, eq(proof.sourceId, source.id))
-    .orderBy(desc(proof.capturedAt));
-  return rows.map(toView);
+// Workspace-scoped proof reads (the scoping deferred from T2.1, applied at T2.2).
+// Both add `proof.workspaceId = $ws` to the existing projection and are wrapped in
+// withDbRetry so a transient Neon cold start is retried transparently behind the
+// inbox loading state. No schema/seed/seam/ProofView change — the T6 multi-tenant
+// swap stays mechanical. See specs/T2.2-proof-inbox/contracts/queries-workspace-scoped.md.
+
+// All proof in a workspace, newest first (the inbox Wall reads this once and
+// filters/sorts/searches in memory; the dashboard uses its own summary read).
+export async function getProofs(workspaceId: string): Promise<ProofView[]> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select(proofColumns)
+      .from(proof)
+      .innerJoin(source, eq(proof.sourceId, source.id))
+      .where(eq(proof.workspaceId, workspaceId))
+      .orderBy(desc(proof.capturedAt));
+    return rows.map(toView);
+  });
 }
 
-export async function getProof(id: string): Promise<ProofView | null> {
-  const rows = await getDb()
-    .select(proofColumns)
-    .from(proof)
-    .innerJoin(source, eq(proof.sourceId, source.id))
-    .where(eq(proof.id, id))
-    .limit(1);
-  return rows[0] ? toView(rows[0]) : null;
+// A single proof, scoped to the workspace: a proof from another workspace resolves
+// to null (not found). No caller in T2.2 beyond the detail placeholder; the
+// signature is fixed now so the T2.3 proof detail is mechanical.
+export async function getProof(
+  workspaceId: string,
+  id: string,
+): Promise<ProofView | null> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select(proofColumns)
+      .from(proof)
+      .innerJoin(source, eq(proof.sourceId, source.id))
+      .where(and(eq(proof.workspaceId, workspaceId), eq(proof.id, id)))
+      .limit(1);
+    return rows[0] ? toView(rows[0]) : null;
+  });
 }
 
 // ============================================================================
