@@ -1,6 +1,7 @@
 import { ProofCard } from "@/components/proof-card";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { getProofs } from "@/db/queries";
+import { getCurrentWorkspace } from "@/lib/session";
 
 // Dynamic + the lazy db client → CI/static build is green without DATABASE_URL;
 // real data is read at request time.
@@ -11,7 +12,10 @@ export const metadata = {
 };
 
 export default async function StyleguideDataPage() {
-  const proofs = await getProofs();
+  // getProofs is workspace-scoped (T2.2); resolve the current workspace via the
+  // seam, as the app does.
+  const workspace = await getCurrentWorkspace();
+  const proofs = await getProofs(workspace.id);
 
   return (
     <main className="mx-auto max-w-content px-6 py-16">

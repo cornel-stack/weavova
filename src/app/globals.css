@@ -264,3 +264,22 @@ body {
   text-align: center;
   color: var(--ink-3);
 }
+
+/* ===========================================================================
+   Proof inbox Wall — stretched-link overlay (T2.2). Each card in the masonry
+   Wall (src/components/app/proof-inbox/inbox-wall.tsx) gets a sibling <Link>
+   overlay (z-10) so the whole card opens the proof detail WITHOUT editing the
+   byte-unchanged ProofCard. The card's own "Make" button is already absolutely
+   positioned; these two rules lift its stacking ABOVE the overlay so it stays
+   independently clickable, and reveal it on card hover (the overlay covers the
+   article, so the card's own group-hover can't fire). Scoped to .wv-wall-card —
+   the only <article>/<button> there is the ProofCard and its Make action.
+   =========================================================================== */
+
+.wv-wall-card article button {
+  z-index: 20;
+}
+
+.wv-wall-card:hover article button {
+  opacity: 1;
+}
