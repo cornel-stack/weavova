@@ -28,3 +28,6 @@ yarn-error.log*
 # misc
 .DS_Store
 *.pem
+
+# office app lock files (e.g. LibreOffice on docs/*.docx)
+.~lock.*#

@@ -184,5 +184,5 @@ keyboard-accessible, passes its acceptance criteria, builds green.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/T1-workspace-shell/plan.md` (active slice: T1 — Workspace shell).
+`specs/T2.1-dashboard/plan.md` (active slice: T2.1 — Dashboard).
 <!-- SPECKIT END -->

@@ -1,5 +1,6 @@
 import { asc, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "./client";
+import { withDbRetry } from "./with-retry";
 import { consent, proof, source, workspace } from "./schema";
 import type { ConsentState, ProofView } from "@/lib/proof";
 
@@ -7,13 +8,17 @@ export type Workspace = typeof workspace.$inferSelect;
 
 // The seeded demo workspace (oldest row). The session/workspace seam
 // (src/lib/session.ts) wraps this; T6 replaces the seam with real auth.
+// Cold-start hardened (T2.1) so the /app layout's workspace read survives a
+// transient Neon wake-up; the seam itself is unchanged.
 export async function getDefaultWorkspace(): Promise<Workspace | null> {
-  const rows = await getDb()
-    .select()
-    .from(workspace)
-    .orderBy(asc(workspace.createdAt))
-    .limit(1);
-  return rows[0] ?? null;
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select()
+      .from(workspace)
+      .orderBy(asc(workspace.createdAt))
+      .limit(1);
+    return rows[0] ?? null;
+  });
 }
 
 // Effective consent = the latest version's state (correlated subquery). A proof
@@ -87,4 +92,83 @@ export async function getProof(id: string): Promise<ProofView | null> {
     .where(eq(proof.id, id))
     .limit(1);
   return rows[0] ? toView(rows[0]) : null;
+}
+
+// ============================================================================
+// Dashboard read model (T2.1). The single workspace-scoped read the dashboard
+// masthead/hero/grid consume. KPI numbers are COMPUTED here (never hardcoded in
+// the UI); time windows use the real current date (DB now()). The clip-derived
+// fields are honest placeholders until the derived_asset entity lands at T2.4 —
+// see the `// T2.4:` markers below. No external view/engagement metric is ever
+// part of this contract (Weavova owns none in v1).
+// ============================================================================
+
+/** A clip the merchant could feature later — owned descriptors only, no views. */
+export type LatestClipDescriptor = {
+  customerName: string;
+  verified: boolean;
+  createdAt: string; // ISO
+};
+
+export type DashboardSummary = {
+  /** proof captured in the trailing 7 days (real now()) */
+  proofThisWeek: number;
+  /** proof not yet reviewed (also the greeting's "N to review" count) */
+  needsReview: number;
+  /** all proof in the workspace (discriminates the empty state) */
+  totalProof: number;
+  /** clips created this calendar month */
+  clipsThisMonth: number;
+  /** the most recent owned clip, or null when none exist */
+  latestClip: LatestClipDescriptor | null;
+  /** the most-recently-captured proof, shown large; null when no proof */
+  heroProof: ProofView | null;
+  /** the next most-recent proof after the hero (capped), hero excluded */
+  recentProof: ProofView[];
+};
+
+// Screen 01 shows a 2×3 recent grid; the rest is reachable via the inbox (T2.2).
+const RECENT_GRID_LIMIT = 6;
+
+export async function getDashboardSummary(
+  workspaceId: string,
+): Promise<DashboardSummary> {
+  return withDbRetry(async () => {
+    const db = getDb();
+
+    // Counts span ALL workspace proof (not just the fetched page). Windows use
+    // the DB's real now() — never anchored to the newest proof (FR-004 / A-02).
+    const [counts] = await db
+      .select({
+        totalProof: sql<number>`count(*)::int`,
+        needsReview: sql<number>`(count(*) filter (where ${proof.reviewed} = false))::int`,
+        proofThisWeek: sql<number>`(count(*) filter (where ${proof.capturedAt} >= now() - interval '7 days'))::int`,
+      })
+      .from(proof)
+      .where(eq(proof.workspaceId, workspaceId));
+
+    // Hero + recent in one ordered, limited fetch reusing the existing
+    // projection. Element 0 = hero; the rest = the grid (hero excluded).
+    const rows = await db
+      .select(proofColumns)
+      .from(proof)
+      .innerJoin(source, eq(proof.sourceId, source.id))
+      .where(eq(proof.workspaceId, workspaceId))
+      .orderBy(desc(proof.capturedAt))
+      .limit(RECENT_GRID_LIMIT + 1);
+
+    const views = rows.map(toView);
+
+    return {
+      proofThisWeek: counts?.proofThisWeek ?? 0,
+      needsReview: counts?.needsReview ?? 0,
+      totalProof: counts?.totalProof ?? 0,
+      // T2.4: count derived_asset rows created this month (workspace-scoped).
+      clipsThisMonth: 0,
+      // T2.4: read the most recent owned clip (no view count — owned data only).
+      latestClip: null,
+      heroProof: views[0] ?? null,
+      recentProof: views.slice(1, RECENT_GRID_LIMIT + 1),
+    };
+  });
 }
