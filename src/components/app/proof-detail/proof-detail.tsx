@@ -1,8 +1,10 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import type { ClipView } from "@/lib/clip";
 import type { ProofDetailView } from "@/lib/proof";
 import { ProofDetailActions } from "./proof-detail-actions";
 import { ProofDetailConsent } from "./proof-detail-consent";
+import { ProofDetailGeneratedAssets } from "./proof-detail-generated-assets";
 import { ProofDetailMedia } from "./proof-detail-media";
 import { ProofDetailMeta } from "./proof-detail-meta";
 
@@ -14,7 +16,13 @@ import { ProofDetailMeta } from "./proof-detail-meta";
 // No tab chrome (Q3): the transcript is the content. No warmth/sentiment panel, no
 // product/variant, no generated-asset counts (FR-019).
 
-export function ProofDetail({ proof }: { proof: ProofDetailView }) {
+export function ProofDetail({
+  proof,
+  clips,
+}: {
+  proof: ProofDetailView;
+  clips: ClipView[];
+}) {
   const isMedia = proof.proofType !== "text";
   const words = isMedia ? proof.transcript : proof.quote;
 
@@ -41,6 +49,7 @@ export function ProofDetail({ proof }: { proof: ProofDetailView }) {
               {words}
             </blockquote>
           )}
+          <ProofDetailGeneratedAssets clips={clips} />
         </div>
 
         {/* side panel — provenance, consent, the one action */}

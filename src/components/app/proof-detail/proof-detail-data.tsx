@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getProof } from "@/db/queries";
+import { getProof, getProofClips } from "@/db/queries";
 import { ProofDetail } from "./proof-detail";
 
 // The data integrator (async Server, T2.3). Performs the single workspace-scoped
@@ -26,5 +26,10 @@ export async function ProofDetailData({
     notFound();
   }
 
-  return <ProofDetail proof={proof} />;
+  // The proof's generated clips (T2.4a) — a separate workspace-scoped read so the
+  // T2.3 getProof / ProofDetailView contract stays byte-stable. Withdrawn clips are
+  // excluded by the read (P-VII).
+  const clips = await getProofClips(workspaceId, id);
+
+  return <ProofDetail proof={proof} clips={clips} />;
 }

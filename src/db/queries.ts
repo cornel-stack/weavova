@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql, type AnyColumn } from "drizzle-orm";
 import { getDb } from "./client";
 import { withDbRetry } from "./with-retry";
-import { consent, proof, source, workspace } from "./schema";
+import { consent, derivedAsset, proof, source, workspace } from "./schema";
+import type { ClipView } from "@/lib/clip";
 import type { ConsentState, ProofDetailView, ProofView } from "@/lib/proof";
 
 export type Workspace = typeof workspace.$inferSelect;
@@ -21,14 +22,30 @@ export async function getDefaultWorkspace(): Promise<Workspace | null> {
   });
 }
 
-// Effective consent = the latest version's state (correlated subquery). A proof
-// with no consent row yields null → mapped to a non-granted state (fails closed).
-const latestConsentState = sql<ConsentState | null>`(
+// Effective consent = the latest version's state (correlated subquery), as one
+// shared helper so the proof reads and the T2.4a derived-asset withdrawal filter
+// use IDENTICAL logic (one source of truth — P-VII). A proof with no consent row
+// yields null → a non-granted state (fails closed).
+function effectiveConsentState(proofIdColumn: AnyColumn) {
+  return sql<ConsentState | null>`(
   select c.state from ${consent} c
-  where c.proof_id = ${proof.id}
+  where c.proof_id = ${proofIdColumn}
   order by c.version desc
   limit 1
 )`;
+}
+
+// SQL predicate: the proof's effective consent is currently 'granted'. The T2.4a
+// derived-asset reads apply this to WITHDRAW assets whose proof's consent is no
+// longer granted (revoked/awaiting) — revocation is a new version, never a delete,
+// so this read-time gate (not a DB cascade) is the P-VII enforcement.
+function effectiveConsentGranted(proofIdColumn: AnyColumn) {
+  return sql`${effectiveConsentState(proofIdColumn)} = 'granted'`;
+}
+
+// The proof reads use the shared helper bound to proof.id — identical generated SQL
+// to the prior inline subquery (behaviour-preserving; ProofView/getProofs unchanged).
+const latestConsentState = effectiveConsentState(proof.id);
 
 const proofColumns = {
   id: proof.id,
@@ -225,16 +242,96 @@ export async function getDashboardSummary(
 
     const views = rows.map(toView);
 
+    // Clips this calendar month (real now()), workspace-scoped, WITHDRAWN assets
+    // excluded (the proof's effective consent must be granted — P-VII).
+    const [clipCount] = await db
+      .select({ clipsThisMonth: sql<number>`count(*)::int` })
+      .from(derivedAsset)
+      .where(
+        and(
+          eq(derivedAsset.workspaceId, workspaceId),
+          sql`${derivedAsset.createdAt} >= date_trunc('month', now())`,
+          effectiveConsentGranted(derivedAsset.proofId),
+        ),
+      );
+
+    // The most recent non-withdrawn clip → owned descriptor only (no view metric).
+    const latestClipRows = await db
+      .select({
+        customerName: proof.customerName,
+        verified: proof.verified,
+        createdAt: derivedAsset.createdAt,
+      })
+      .from(derivedAsset)
+      .innerJoin(proof, eq(derivedAsset.proofId, proof.id))
+      .where(
+        and(
+          eq(derivedAsset.workspaceId, workspaceId),
+          effectiveConsentGranted(derivedAsset.proofId),
+        ),
+      )
+      .orderBy(desc(derivedAsset.createdAt))
+      .limit(1);
+    const latest = latestClipRows[0];
+    const latestClip: LatestClipDescriptor | null = latest
+      ? {
+          customerName: latest.customerName,
+          verified: latest.verified,
+          createdAt: latest.createdAt.toISOString(),
+        }
+      : null;
+
     return {
       proofThisWeek: counts?.proofThisWeek ?? 0,
       needsReview: counts?.needsReview ?? 0,
       totalProof: counts?.totalProof ?? 0,
-      // T2.4: count derived_asset rows created this month (workspace-scoped).
-      clipsThisMonth: 0,
-      // T2.4: read the most recent owned clip (no view count — owned data only).
-      latestClip: null,
+      clipsThisMonth: clipCount?.clipsThisMonth ?? 0,
+      latestClip,
       heroProof: views[0] ?? null,
       recentProof: views.slice(1, RECENT_GRID_LIMIT + 1),
     };
+  });
+}
+
+// ============================================================================
+// Generated-assets read (T2.4a). A proof's clips for the detail's "Generated
+// assets" section — workspace-scoped, retry-hardened. WITHDRAWN assets are
+// excluded: a clip whose proof's effective consent is not 'granted' (revoked/
+// awaiting) is not returned (P-VII, read-time withdrawal). The row is retained in
+// the table for audit. Owned fields only — never a view/engagement metric (FR-019).
+// ============================================================================
+
+export async function getProofClips(
+  workspaceId: string,
+  proofId: string,
+): Promise<ClipView[]> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        id: derivedAsset.id,
+        kind: derivedAsset.kind,
+        format: derivedAsset.format,
+        assetUrl: derivedAsset.assetUrl,
+        hook: derivedAsset.hook,
+        createdAt: derivedAsset.createdAt,
+      })
+      .from(derivedAsset)
+      .where(
+        and(
+          eq(derivedAsset.workspaceId, workspaceId),
+          eq(derivedAsset.proofId, proofId),
+          effectiveConsentGranted(derivedAsset.proofId),
+        ),
+      )
+      .orderBy(desc(derivedAsset.createdAt));
+
+    return rows.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      format: row.format,
+      assetUrl: row.assetUrl,
+      hook: row.hook,
+      createdAt: row.createdAt.toISOString(),
+    }));
   });
 }
