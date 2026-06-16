@@ -31,3 +31,16 @@ export interface ProofView {
 }
 
 export type ProofCardProps = ProofView;
+
+// The proof-detail read shape (T2.3): a SUPERSET of ProofView that also carries
+// the effective (latest-version) consent's version + effective date, so the
+// detail can render "granted · {date} · v{n}" faithfully. ProofView/ProofCardProps
+// above stay byte-unchanged — only the proof detail reads this richer projection
+// (built ONLY in getProof). consentAt is granted→grantedAt / revoked→revokedAt /
+// awaiting→createdAt; both fields are null only if a proof has no consent row.
+export interface ProofDetailView extends ProofView {
+  /** effective consent version ("v{n}"); null if no consent row exists */
+  consentVersion: number | null;
+  /** ISO effective-consent date; null when none applies */
+  consentAt: string | null;
+}
