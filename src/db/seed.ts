@@ -1,6 +1,7 @@
 import { getDb } from "./client.ts";
 import {
   consent,
+  derivedAsset,
   proof,
   source,
   workspace,
@@ -99,10 +100,40 @@ const CAPTURE_CONTEXT = {
   consentCopyVersion: "2026-05",
 };
 
+// Stubbed render (CLAUDE.md §3): every generated clip points at the SAME pre-made
+// sample clip in R2 — an honest stand-in for the real per-proof render (T8), never
+// a fabricated personalized render (FR-019).
+const SAMPLE_CLIP_URL = "r2://weavova-samples/press-run-sample.mp4";
+
+// Seeded derived assets (clips), T2.4a. Each is made under a proof's GRANTED consent
+// version. The cascade is demonstrated in static data (Q3→A): the Leo M. clip was
+// made during his granted window (under v1), but his effective consent is now revoked
+// (v2) → it is WITHDRAWN at read time (absent from the dashboard count, latest clip,
+// and his detail) while its row is retained for audit. The active clips (granted
+// proofs) are counted + shown. Dates are relative (A-10) so "this month" stays alive.
+type ClipFixture = {
+  customerName: string; // the source proof
+  consentVersion: number; // the granted consent version the clip was made under
+  format: "9x16" | "1x1" | "4x5" | "16x9";
+  hook: string; // brand-authored hook provenance
+  createdAt: string; // ISO (relative)
+};
+const CLIPS: ClipFixture[] = [
+  // active — under currently-granted proofs (counted + shown)
+  { customerName: "Maria L.", consentVersion: 1, format: "9x16", hook: "Three times and counting.", createdAt: ago(2) },
+  { customerName: "Aisha K.", consentVersion: 1, format: "9x16", hook: "What's that smell? (the good kind)", createdAt: ago(3) },
+  { customerName: "Greta S.", consentVersion: 1, format: "9x16", hook: "The calmest evening in months.", createdAt: ago(5) },
+  // born-then-withdrawn — under Leo M. (granted ago(17) → revoked ago(6)); made at
+  // ago(10), inside the granted window, under v1. Now withdrawn (effective = revoked).
+  { customerName: "Leo M.", consentVersion: 1, format: "9x16", hook: "Still going strong months later.", createdAt: ago(10) },
+];
+
 async function seed() {
   const db = getDb();
 
-  // Reset (FK-safe order) so the seed is re-runnable.
+  // Reset (FK-safe order) so the seed is re-runnable. derived_asset first (it
+  // references proof/consent/workspace).
+  await db.delete(derivedAsset);
   await db.delete(consent);
   await db.delete(proof);
   await db.delete(source);
@@ -122,6 +153,11 @@ async function seed() {
     sourceIdByKind.set(s.kind, row.id);
   }
 
+  // Capture ids so derived assets can reference the proof + the granted consent
+  // version they were made under.
+  const proofIdByCustomer = new Map<string, string>();
+  const consentIdByProofVersion = new Map<string, string>(); // `${proofId}:${version}`
+
   let proofCount = 0;
   let consentCount = 0;
   for (const f of FIXTURES) {
@@ -140,23 +176,50 @@ async function seed() {
         thumbnail: null,
       })
       .returning({ id: proof.id });
+    proofIdByCustomer.set(f.customerName, row.id);
     proofCount += 1;
 
     for (const c of f.consent) {
-      await db.insert(consent).values({
-        proofId: row.id,
-        state: c.state,
-        grantedAt: c.grantedAt ?? null,
-        revokedAt: c.revokedAt ?? null,
-        version: c.version,
-        captureContext: CAPTURE_CONTEXT,
-      });
+      const [crow] = await db
+        .insert(consent)
+        .values({
+          proofId: row.id,
+          state: c.state,
+          grantedAt: c.grantedAt ?? null,
+          revokedAt: c.revokedAt ?? null,
+          version: c.version,
+          captureContext: CAPTURE_CONTEXT,
+        })
+        .returning({ id: consent.id });
+      consentIdByProofVersion.set(`${row.id}:${c.version}`, crow.id);
       consentCount += 1;
     }
   }
 
+  // Derived assets (clips). Each references its source proof and the GRANTED consent
+  // version it was made under (provenance). The Leo M. clip is now withdrawn at read
+  // time because his effective consent is revoked (P-VII) — the row is retained.
+  let clipCount = 0;
+  for (const clip of CLIPS) {
+    const proofId = proofIdByCustomer.get(clip.customerName)!;
+    const consentId = consentIdByProofVersion.get(
+      `${proofId}:${clip.consentVersion}`,
+    )!;
+    await db.insert(derivedAsset).values({
+      workspaceId: ws.id,
+      proofId,
+      consentId,
+      kind: "clip",
+      format: clip.format,
+      assetUrl: SAMPLE_CLIP_URL,
+      hook: clip.hook,
+      createdAt: new Date(clip.createdAt),
+    });
+    clipCount += 1;
+  }
+
   console.log(
-    `seeded: workspace=1 sources=${SOURCES.length} proofs=${proofCount} consent=${consentCount}`,
+    `seeded: workspace=1 sources=${SOURCES.length} proofs=${proofCount} consent=${consentCount} clips=${clipCount}`,
   );
 }
 

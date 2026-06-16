@@ -112,3 +112,53 @@ export const consent = pgTable(
     index("consent_proof_version_idx").on(t.proofId, t.version.desc()),
   ],
 );
+
+// Closed, stable domains for derived assets (T2.4a) → Postgres enums.
+export const derivedAssetKindEnum = pgEnum("derived_asset_kind", [
+  "clip",
+  "carousel",
+  "embed",
+]);
+export const clipFormatEnum = pgEnum("clip_format", [
+  "9x16",
+  "1x1",
+  "4x5",
+  "16x9",
+]);
+
+// A generated asset (a clip) produced from a proof (T2.4a — the data layer for the
+// clip studio). Linked to its source `proof` and to the `consent` it was made under.
+//
+// `consentId` is PROVENANCE + hard-delete integrity ONLY. Revocation is a new
+// `revoked` consent version (never a delete), so `onDelete: cascade` NEVER fires on
+// revocation — a clip is *withdrawn* at READ time when the proof's effective consent
+// is not 'granted' (P-VII). The row is retained for audit. The T8 render-pipeline
+// fields (transcript/captions, highlight, reframe, music licensing, approval/
+// distribution) are resolved upstream and are NOT stored here.
+export const derivedAsset = pgTable(
+  "derived_asset",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    proofId: uuid("proof_id")
+      .notNull()
+      .references(() => proof.id, { onDelete: "cascade" }),
+    // provenance: the consent version the clip was made under (+ hard-delete only)
+    consentId: uuid("consent_id")
+      .notNull()
+      .references(() => consent.id, { onDelete: "cascade" }),
+    kind: derivedAssetKindEnum("kind").notNull(),
+    format: clipFormatEnum("format").notNull(),
+    assetUrl: text("asset_url").notNull(), // stored (stubbed) sample-clip reference
+    hook: text("hook"), // owned brand-authored hook provenance
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("derived_asset_ws_created_idx").on(t.workspaceId, t.createdAt.desc()),
+    index("derived_asset_proof_idx").on(t.proofId),
+  ],
+);
