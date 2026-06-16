@@ -2,7 +2,7 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "./client";
 import { withDbRetry } from "./with-retry";
 import { consent, proof, source, workspace } from "./schema";
-import type { ConsentState, ProofView } from "@/lib/proof";
+import type { ConsentState, ProofDetailView, ProofView } from "@/lib/proof";
 
 export type Workspace = typeof workspace.$inferSelect;
 
@@ -95,21 +95,68 @@ export async function getProofs(workspaceId: string): Promise<ProofView[]> {
   });
 }
 
-// A single proof, scoped to the workspace: a proof from another workspace resolves
-// to null (not found). No caller in T2.2 beyond the detail placeholder; the
-// signature is fixed now so the T2.3 proof detail is mechanical.
+// ── Proof detail projection (T2.3) ──────────────────────────────────────────
+// getProof returns ProofDetailView = ProofView + the effective (latest-version)
+// consent's version + effective date, so the detail shows "granted · {date} · v{n}"
+// faithfully. PROJECTION-ONLY: proofColumns/toView/latestConsentState/getProofs
+// above are byte-unchanged; only getProof + these detail-scoped helpers carry the
+// extra consent fields (owned data, never fabricated). No schema/seed change.
+// See specs/T2.3-proof-detail/contracts/queries-proof-detail.md.
+
+const latestConsentVersion = sql<number | string | null>`(
+  select c.version from ${consent} c
+  where c.proof_id = ${proof.id}
+  order by c.version desc
+  limit 1
+)`;
+
+// Effective consent date per state: granted → grantedAt, revoked → revokedAt,
+// awaiting → createdAt (capture time). coalesce over the latest-version row.
+const latestConsentEffectiveAt = sql<Date | string | null>`(
+  select coalesce(c.revoked_at, c.granted_at, c.created_at) from ${consent} c
+  where c.proof_id = ${proof.id}
+  order by c.version desc
+  limit 1
+)`;
+
+const detailColumns = {
+  ...proofColumns,
+  consentVersion: latestConsentVersion,
+  consentEffectiveAt: latestConsentEffectiveAt,
+};
+
+type ProofDetailRow = ProofRow & {
+  consentVersion: number | string | null;
+  consentEffectiveAt: Date | string | null;
+};
+
+function toDetailView(row: ProofDetailRow): ProofDetailView {
+  return {
+    ...toView(row),
+    consentVersion:
+      row.consentVersion == null ? null : Number(row.consentVersion),
+    consentAt:
+      row.consentEffectiveAt == null
+        ? null
+        : new Date(row.consentEffectiveAt).toISOString(),
+  };
+}
+
+// A single proof, scoped to the workspace: a proof from another workspace (or a
+// non-existent id) resolves to null — the same result, with no other tenant's row
+// ever projected. That null drives the detail's notFound() (US3 tenant isolation).
 export async function getProof(
   workspaceId: string,
   id: string,
-): Promise<ProofView | null> {
+): Promise<ProofDetailView | null> {
   return withDbRetry(async () => {
     const rows = await getDb()
-      .select(proofColumns)
+      .select(detailColumns)
       .from(proof)
       .innerJoin(source, eq(proof.sourceId, source.id))
       .where(and(eq(proof.workspaceId, workspaceId), eq(proof.id, id)))
       .limit(1);
-    return rows[0] ? toView(rows[0]) : null;
+    return rows[0] ? toDetailView(rows[0]) : null;
   });
 }
 
