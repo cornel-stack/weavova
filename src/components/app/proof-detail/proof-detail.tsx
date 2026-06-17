@@ -12,7 +12,8 @@ import { ProofDetailMeta } from "./proof-detail-meta";
 // Two columns: the content column leads with the customer's verbatim words (the
 // headline — Principle II), with the CONDITIONAL media region above it (renders
 // nothing when the proof has no media — Q1); the side panel carries the metadata,
-// the read-only consent panel, and the consent-gated inert "Make a clip".
+// the read-only consent panel, and the consent-gated "Make a clip" (links to the
+// clip studio — T2.4b).
 // No tab chrome (Q3): the transcript is the content. No warmth/sentiment panel, no
 // product/variant, no generated-asset counts (FR-019).
 

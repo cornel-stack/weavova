@@ -20,3 +20,11 @@ export interface ClipView {
   /** ISO date the clip was created */
   createdAt: string;
 }
+
+// The stubbed render's pre-made sample clip in R2 (CLAUDE.md §3). Extracted here
+// (T2.4b — D5) as the ONE source of truth shared by the seed (src/db/seed.ts) and
+// the Generate Server Action, so both point the stub at the same asset and the real
+// T8 engine swaps behind one seam. Its value MUST equal the seed's original literal
+// exactly so a re-seed is behaviour-identical. Never presented as a real per-proof
+// render (FR-019).
+export const SAMPLE_CLIP_URL = "r2://weavova-samples/press-run-sample.mp4";

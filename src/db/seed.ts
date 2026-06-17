@@ -7,6 +7,7 @@ import {
   workspace,
   type SourceKind,
 } from "./schema.ts";
+import { SAMPLE_CLIP_URL } from "../lib/clip.ts";
 
 type ProofType = "text" | "video" | "photo" | "audio";
 type ConsentState = "granted" | "awaiting" | "revoked";
@@ -102,8 +103,8 @@ const CAPTURE_CONTEXT = {
 
 // Stubbed render (CLAUDE.md §3): every generated clip points at the SAME pre-made
 // sample clip in R2 — an honest stand-in for the real per-proof render (T8), never
-// a fabricated personalized render (FR-019).
-const SAMPLE_CLIP_URL = "r2://weavova-samples/press-run-sample.mp4";
+// a fabricated personalized render (FR-019). `SAMPLE_CLIP_URL` is imported from
+// the shared module (T2.4b — D5): the seed and the studio write the same URL.
 
 // Seeded derived assets (clips), T2.4a. Each is made under a proof's GRANTED consent
 // version. The cascade is demonstrated in static data (Q3→A): the Leo M. clip was
