@@ -2,7 +2,7 @@ import { and, asc, desc, eq, sql, type AnyColumn } from "drizzle-orm";
 import { getDb } from "./client";
 import { withDbRetry } from "./with-retry";
 import { consent, derivedAsset, proof, source, workspace } from "./schema";
-import type { ClipView } from "@/lib/clip";
+import { SAMPLE_CLIP_URL, type ClipFormat, type ClipView } from "@/lib/clip";
 import type { ConsentState, ProofDetailView, ProofView } from "@/lib/proof";
 
 export type Workspace = typeof workspace.$inferSelect;
@@ -334,4 +334,67 @@ export async function getProofClips(
       createdAt: row.createdAt.toISOString(),
     }));
   });
+}
+
+// ============================================================================
+// Clip studio writes (T2.4b). The Generate Server Action's consent re-check +
+// the single-row insert. The proof reads + the T2.4a clip reads above are
+// byte-unchanged; only these two functions are added.
+// ============================================================================
+
+// Consent re-check at generate (P-VII). Returns the GRANTED consent row's id for a
+// proof — its PROVENANCE for the written clip — or null when the proof's effective
+// consent is not 'granted'. Reuses the shared `effectiveConsentGranted`
+// (→ effectiveConsentState), so the generate gate is IDENTICAL to T2.4a's read-time
+// withdrawal gate (one source of truth). Workspace-scoped via the proof join: a
+// cross-workspace or missing proofId yields null (no leak). withDbRetry-wrapped
+// (a read — safe to retry). The latest version row is the effective one; the
+// `effectiveConsentGranted` predicate guarantees that latest row's state is granted.
+export async function getGrantedConsentId(
+  workspaceId: string,
+  proofId: string,
+): Promise<{ consentId: string } | null> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({ consentId: consent.id })
+      .from(consent)
+      .innerJoin(proof, eq(consent.proofId, proof.id))
+      .where(
+        and(
+          eq(proof.workspaceId, workspaceId),
+          eq(proof.id, proofId),
+          effectiveConsentGranted(proof.id),
+        ),
+      )
+      .orderBy(desc(consent.version))
+      .limit(1);
+    return rows[0] ?? null;
+  });
+}
+
+// Persist one generated clip (T2.4b — the app's first mutation). A SINGLE insert
+// attempt — deliberately NOT withDbRetry-wrapped (D4): an insert has no natural
+// unique key, so a blind retry on a transient error could double-write. The caller
+// (the Generate action) re-checks consent first (getGrantedConsentId) and passes the
+// granted consentId as provenance; assetUrl is the shared stubbed sample (D5).
+export async function insertDerivedAsset(values: {
+  workspaceId: string;
+  proofId: string;
+  consentId: string;
+  format: ClipFormat;
+  hook: string | null;
+}): Promise<{ createdAt: Date }> {
+  const [row] = await getDb()
+    .insert(derivedAsset)
+    .values({
+      workspaceId: values.workspaceId,
+      proofId: values.proofId,
+      consentId: values.consentId,
+      kind: "clip",
+      format: values.format,
+      assetUrl: SAMPLE_CLIP_URL,
+      hook: values.hook,
+    })
+    .returning({ createdAt: derivedAsset.createdAt });
+  return row;
 }

@@ -1,9 +1,13 @@
 import { BadgeCheck, Play, Scissors, Store } from "lucide-react";
+import Link from "next/link";
 import type { ConsentState, ProofCardProps } from "@/lib/proof";
 
 // Ported from the export's `wv-clip` (design-reference screens 01 Dashboard /
 // 02 Proof inbox). Proof-forward: the customer's words (Fraunces) — or the
 // media thumbnail — is the largest, warmest element; chrome stays quiet.
+// T2.4b (A-11 named exception): the consent-gated "Make" now LINKS to the clip
+// studio; ONLY the action element changed (button → Link) — structure/appearance
+// and every class are byte-identical.
 
 const CONSENT_DOT: Record<ConsentState, string> = {
   granted: "bg-success",
@@ -38,6 +42,7 @@ function formatDate(iso: string): string {
 
 export function ProofCard(props: ProofCardProps) {
   const {
+    id,
     customerName,
     proofType,
     quote,
@@ -112,13 +117,13 @@ export function ProofCard(props: ProofCardProps) {
 
       {/* persimmon "Make" — revealed on hover/focus, ONLY when consent granted */}
       {canMake && (
-        <button
-          type="button"
+        <Link
+          href={`/app/proof/${id}/studio`}
           className="absolute bottom-5 right-5 inline-flex items-center gap-1.5 rounded-control bg-persimmon px-3 py-1.5 font-ui text-body-sm font-medium text-on-accent opacity-0 transition-opacity duration-200 ease-pressroom hover:bg-persimmon-deep focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink group-hover:opacity-100"
         >
           <Scissors className="size-3.5" strokeWidth={1.5} aria-hidden />
           Make
-        </button>
+        </Link>
       )}
     </article>
   );

@@ -1,12 +1,14 @@
 import { BadgeCheck, Play, Scissors, Store } from "lucide-react";
+import Link from "next/link";
 import type { ConsentState, ProofView } from "@/lib/proof";
 
 // The latest-proof hero (T2.1), ported from screen 01's hero treatment. The
 // customer's verbatim words (Fraunces, larger than a grid card) are the largest,
 // warmest element (P-II). The "Make a clip" persimmon action appears ONLY when
-// consent is granted (P-VII) and is present-but-not-yet-wired (the studio is
-// T2.4). Self-contained: the canonical ProofCard stays byte-unchanged, so the
-// small display helpers are duplicated here rather than shared from it.
+// consent is granted (P-VII) and LINKS to the clip studio (/app/proof/[id]/studio,
+// wired at T2.4b — FR-001 / A-11). Self-contained: the canonical ProofCard stays
+// byte-unchanged, so the small display helpers are duplicated here rather than
+// shared from it.
 
 const CONSENT_DOT: Record<ConsentState, string> = {
   granted: "bg-success",
@@ -41,6 +43,7 @@ function formatDate(iso: string): string {
 
 export function DashboardHero({ proof }: { proof: ProofView }) {
   const {
+    id,
     customerName,
     proofType,
     quote,
@@ -110,13 +113,13 @@ export function DashboardHero({ proof }: { proof: ProofView }) {
           <span>{formatDate(capturedAt)}</span>
 
           {canMake && (
-            <button
-              type="button"
+            <Link
+              href={`/app/proof/${id}/studio`}
               className="ml-auto inline-flex items-center gap-1.5 rounded-control bg-persimmon px-3 py-1.5 font-ui text-body-sm font-medium text-on-accent transition-colors duration-200 ease-pressroom hover:bg-persimmon-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
             >
               <Scissors className="size-3.5" strokeWidth={1.5} aria-hidden />
               Make a clip
-            </button>
+            </Link>
           )}
         </div>
       </div>

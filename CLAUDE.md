@@ -184,5 +184,5 @@ keyboard-accessible, passes its acceptance criteria, builds green.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/T2.4a-derived-asset-schema/plan.md` (active slice: T2.4a — Derived-asset schema & cascade).
+`specs/T2.4b-clip-studio/plan.md` (active slice: T2.4b — Clip studio: configure-and-generate + stubbed render).
 <!-- SPECKIT END -->
