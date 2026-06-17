@@ -2,7 +2,12 @@ import { and, asc, desc, eq, sql, type AnyColumn } from "drizzle-orm";
 import { getDb } from "./client";
 import { withDbRetry } from "./with-retry";
 import { consent, derivedAsset, proof, source, workspace } from "./schema";
-import { SAMPLE_CLIP_URL, type ClipFormat, type ClipView } from "@/lib/clip";
+import {
+  SAMPLE_CLIP_URL,
+  type ClipFormat,
+  type ClipView,
+  type LibraryClipView,
+} from "@/lib/clip";
 import type { ConsentState, ProofDetailView, ProofView } from "@/lib/proof";
 
 export type Workspace = typeof workspace.$inferSelect;
@@ -397,4 +402,55 @@ export async function insertDerivedAsset(values: {
     })
     .returning({ createdAt: derivedAsset.createdAt });
   return row;
+}
+
+// ============================================================================
+// Library read (T3.1). ALL of the workspace's generated clips for the Library
+// surface — workspace-scoped, newest-first, retry-hardened. WITHDRAWN assets are
+// excluded by the SAME shared `effectiveConsentGranted` gate the dashboard/detail
+// clip reads use (one source of truth — P-VII): a clip whose source proof's
+// effective consent is not 'granted' is not returned; its row is retained for
+// audit. Joins `proof` for the owned source context (customer, verified, link
+// target). Owned fields only — never a view/engagement metric (FR-019). The proof
+// reads and the T2.4a clip reads above are byte-unchanged; only this is added.
+// ============================================================================
+
+export async function getLibraryClips(
+  workspaceId: string,
+): Promise<LibraryClipView[]> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        id: derivedAsset.id,
+        proofId: derivedAsset.proofId,
+        customerName: proof.customerName,
+        verified: proof.verified,
+        kind: derivedAsset.kind,
+        format: derivedAsset.format,
+        assetUrl: derivedAsset.assetUrl,
+        hook: derivedAsset.hook,
+        createdAt: derivedAsset.createdAt,
+      })
+      .from(derivedAsset)
+      .innerJoin(proof, eq(derivedAsset.proofId, proof.id))
+      .where(
+        and(
+          eq(derivedAsset.workspaceId, workspaceId),
+          effectiveConsentGranted(derivedAsset.proofId),
+        ),
+      )
+      .orderBy(desc(derivedAsset.createdAt));
+
+    return rows.map((row) => ({
+      id: row.id,
+      proofId: row.proofId,
+      customerName: row.customerName,
+      verified: row.verified,
+      kind: row.kind,
+      format: row.format,
+      assetUrl: row.assetUrl,
+      hook: row.hook,
+      createdAt: row.createdAt.toISOString(),
+    }));
+  });
 }

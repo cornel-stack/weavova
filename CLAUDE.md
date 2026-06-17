@@ -184,5 +184,5 @@ keyboard-accessible, passes its acceptance criteria, builds green.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/T2.4b-clip-studio/plan.md` (active slice: T2.4b — Clip studio: configure-and-generate + stubbed render).
+`specs/T3.1-library/plan.md` (active slice: T3.1 — Library: the home for generated clips; clips-only read of derived_asset).
 <!-- SPECKIT END -->
