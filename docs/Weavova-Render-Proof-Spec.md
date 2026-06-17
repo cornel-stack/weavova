@@ -216,9 +216,9 @@ The stamp is a factual claim: *this is a genuine customer*. **Resolved bar:** it
 
 ### 7.2 Consent scope, display, revocation
 Consent is not a boolean. It carries **use-scope** (organic / paid / showcase / embed), **display preferences** (full name / first-initial / anonymous; face / no-face), and is **revocable**. On revocation:
-- Pull derived assets (schema already cascades `derived_asset.consentId`).
+- **Revocation is a new revoked consent version, never a row delete.** Withdrawal is therefore enforced at **read time** via the proof's *effective* (latest-version) consent: the instant a revoked version is recorded, owned/hosted derived assets vanish from every read — the library, the showcase, embeds, and the distribution queue — while the `derived_asset` row is **retained for audit** ("pull, don't destroy"). The `consentId` FK is provenance + hard-delete integrity only; it never expresses revocation.
 - Stop further distribution.
-- Flag already-posted clips for takedown (we can't un-post, so this needs an operational runbook, not just a DB cascade).
+- Flag already-posted clips for takedown (we can't un-post, so this needs an operational runbook).
 
 **Resolved runbook — two-tier.** Everything Weavova hosts (embeds, showcase, library, queued-but-unposted) is pulled **instantly and automatically** on revocation. Anything already posted to a third-party platform is **auto-flagged to the merchant as a takedown task with a deadline**, the obligation carried in the merchant terms. The consent UX sets this expectation up front ("external posts removed within X days"). We enforce exactly what we control and route what we don't, rather than promising a takedown we can't technically perform.
 
