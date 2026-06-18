@@ -10,6 +10,7 @@ import {
   type LibraryClipView,
 } from "@/lib/clip";
 import type { ConsentState, ProofDetailView, ProofView } from "@/lib/proof";
+import type { ShowcaseItem } from "@/lib/showcase";
 
 export type Workspace = typeof workspace.$inferSelect;
 
@@ -538,4 +539,56 @@ export async function getClip(
           : new Date(row.consentEffectiveAt).toISOString(),
     };
   });
+}
+
+// ============================================================================
+// Showcase read (T-Showcase). The workspace's "wall of proof" — BOTH consented
+// proof and clips, consent-withdrawal-FILTERED via the SHARED effectiveConsentGranted
+// (visibility identical to the dashboard/Library — P-VII), merged newest-first.
+//
+// IMPORTANT: this is DISTINCT from getProofs, which is intentionally UNFILTERED (the
+// inbox shows all consent states). The Showcase shows only GRANTED — so it is its own
+// consented-proof query (reusing proofColumns/toView read-only), NOT a change to
+// getProofs. Clips reuse getLibraryClips (already withdrawal-filtered). Owned fields
+// only — verified is a mark, not a gate (FR-019). Existing reads are byte-unchanged.
+// ============================================================================
+
+export async function getShowcase(
+  workspaceId: string,
+): Promise<ShowcaseItem[]> {
+  const [proofs, clips] = await Promise.all([
+    // consented proof — same projection as the inbox (proofColumns/toView), but
+    // GATED on granted consent (unlike getProofs). Newest-first by capture date.
+    withDbRetry(async () => {
+      const rows = await getDb()
+        .select(proofColumns)
+        .from(proof)
+        .innerJoin(source, eq(proof.sourceId, source.id))
+        .where(
+          and(
+            eq(proof.workspaceId, workspaceId),
+            effectiveConsentGranted(proof.id),
+          ),
+        )
+        .orderBy(desc(proof.capturedAt));
+      return rows.map(toView);
+    }),
+    // consented clips — reuse the existing withdrawal-filtered read unchanged.
+    getLibraryClips(workspaceId),
+  ]);
+
+  const items: ShowcaseItem[] = [
+    ...proofs.map((p): ShowcaseItem => ({ kind: "proof", proof: p })),
+    ...clips.map((c): ShowcaseItem => ({ kind: "clip", clip: c })),
+  ];
+
+  // Newest-first across both kinds. ISO date strings compare lexicographically =
+  // chronologically; proof uses capturedAt, clip uses createdAt.
+  items.sort((a, b) => {
+    const aDate = a.kind === "proof" ? a.proof.capturedAt : a.clip.createdAt;
+    const bDate = b.kind === "proof" ? b.proof.capturedAt : b.clip.createdAt;
+    return bDate.localeCompare(aDate);
+  });
+
+  return items;
 }

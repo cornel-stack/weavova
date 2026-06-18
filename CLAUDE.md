@@ -192,5 +192,5 @@ keyboard-accessible, passes its acceptance criteria, builds green.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/T3.2-clip-detail/plan.md` (active slice: T3.2 — Clip detail: a generated clip's focused view at /app/clip/[id]; derived surface, no-oracle gate).
+`specs/T-showcase/plan.md` (active slice: T-Showcase — /app/showcase curate+preview wall; port screen 10's owned half, distribution cluster deferred to T9; auto/no-schema read).
 <!-- SPECKIT END -->
