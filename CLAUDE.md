@@ -148,18 +148,21 @@ Tiers:
   still behind the same UI seam the real render swaps into at T8. Empty/loading/error states delivered
   across T2.x + T3.
 - **T4** Bulk & exports — campaigns, batch studio, upload, export. **← end of the flowing demo.**
-- **T5** Remaining workspace surfaces — brand kits, consent, requests (library shipped at T3.1; **Showcase
-  deferred → T9**, its real distribution home — or a static placeholder here if ever wanted).
+- **T5** Remaining workspace surfaces — brand kits, consent, requests (library shipped at T3.1; the
+  **Showcase wall (pre-distribution curate/preview half) shipped** — see T-Showcase; its publish/embed/
+  curation cluster is **T9**).
 - **T6** Identity — real Auth.js, workspaces, onboarding (**first real data**).
 - **T7** Capture — collection page + sources (**first real customer proof**).
 - **T8** Media engine — real render worker (FFmpeg + Revideo), formats, R2 pipeline. (The clip detail —
   built early at T3.2 — gets **real clip playback** swapped in here, behind its existing UI seam.)
-- **T9** Monetise & distribute — billing, settings, publishing, **the Showcase (deferred from T3/T5)**,
-  public site.
+- **T9** Monetise & distribute — billing, settings, publishing, **the Showcase distribution cluster**
+  (publish/embed/share/public URLs + curation/"public set" — the coupled half deferred from T-Showcase) +
+  the public `/showcase[/slug]` site.
 - **T10** System, polish & launch.
 
 **Current tier: T4 (bulk & exports) next.** Shipped to prod: T0–T2 (the spine, incl. T2.4a schema + T2.4b
-studio) and **T3 complete (T3.1 Library + T3.2 clip detail)**. Deferred: **Showcase → T9**.
+studio), **T3 (T3.1 Library + T3.2 clip detail)**, and **the Showcase wall (T-Showcase, pre-distribution
+half)**. Deferred to **T9**: the Showcase publish/embed/share/curation cluster + the public site.
 
 ## 9. Way of working — Spec-Driven Development + guardrails
 
