@@ -142,11 +142,11 @@ Tiers:
 - **T0** Foundations & rails — scaffold, tokens, schema + fixtures, auth stub, R2 helper, Inngest/Resend, deploy.
 - **T1** Workspace shell — rail, top bar, workspace switcher (24), command palette (14).
 - **T2** The spine — Dashboard → Proof inbox → Proof detail → Clip studio; stubbed generate → sample clip.
-- **T3** Derived-asset surfaces & states — **T3.1 (Library) shipped; T3.2 (clip detail) IN BUILD** (building
-  early, ahead of the rest of T4). No design-reference clip-detail screen exists, so T3.2 is a **derived
-  surface** (proof-detail 03 layout + studio 04 clip framing + render spec); pre-T8 the clip shows as a
-  non-playing labelled "Sample preview" still behind the same UI seam the real render swaps into at T8.
-  Empty/loading/error states delivered across T2.x + T3.1.
+- **T3** Derived-asset surfaces & states — **COMPLETE & shipped to prod** (T3.1 Library + T3.2 clip detail).
+  No design-reference clip-detail screen exists, so T3.2 is a **derived surface** (proof-detail 03 layout +
+  studio 04 clip framing + render spec); pre-T8 the clip shows as a non-playing labelled "Sample preview"
+  still behind the same UI seam the real render swaps into at T8. Empty/loading/error states delivered
+  across T2.x + T3.
 - **T4** Bulk & exports — campaigns, batch studio, upload, export. **← end of the flowing demo.**
 - **T5** Remaining workspace surfaces — brand kits, consent, requests (library shipped at T3.1; **Showcase
   deferred → T9**, its real distribution home — or a static placeholder here if ever wanted).
@@ -158,9 +158,8 @@ Tiers:
   public site.
 - **T10** System, polish & launch.
 
-**Current: building T3.2 (clip detail) early, then T4 (bulk & exports).** Shipped to prod: T0–T2 (the spine,
-incl. T2.4a schema + T2.4b studio) and **T3.1 (Library)**. In build: **T3.2 clip detail** (un-deferred,
-built now). Deferred: **Showcase → T9**.
+**Current tier: T4 (bulk & exports) next.** Shipped to prod: T0–T2 (the spine, incl. T2.4a schema + T2.4b
+studio) and **T3 complete (T3.1 Library + T3.2 clip detail)**. Deferred: **Showcase → T9**.
 
 ## 9. Way of working — Spec-Driven Development + guardrails
 
