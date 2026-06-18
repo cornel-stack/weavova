@@ -74,3 +74,30 @@ export function validateGenerateInput(raw: unknown): ValidatedGenerateInput | nu
 
   return { proofId, format, hook: trimmed.length === 0 ? null : trimmed };
 }
+
+// ── Batch (T4-B1) ────────────────────────────────────────────────────────────
+// The bulk form of Generate: one clip per selected proof, each re-checked for
+// consent at generate (P-VII) and written via the SAME primitives as generateClip
+// (single-attempt insert, the guard above, the shared SAMPLE_CLIP_URL). The result
+// is an HONEST per-proof outcome — no all-or-nothing rollback, no fabricated
+// success (FR-019). The single-clip GenerateInput/GenerateResult above are unchanged.
+
+export interface GenerateBatchInput {
+  proofIds: string[];
+  format: ClipFormat;
+}
+
+export type BatchSkipReason = "needs_consent";
+
+export interface BatchItemResult {
+  proofId: string;
+  status: "made" | "skipped" | "error";
+  reason?: BatchSkipReason;
+}
+
+export interface BatchResult {
+  made: number;
+  skipped: number;
+  failed: number;
+  items: BatchItemResult[];
+}
