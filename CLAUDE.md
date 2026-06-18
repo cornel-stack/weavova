@@ -195,5 +195,5 @@ keyboard-accessible, passes its acceptance criteria, builds green.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/T-showcase/plan.md` (active slice: T-Showcase — /app/showcase curate+preview wall; port screen 10's owned half, distribution cluster deferred to T9; auto/no-schema read).
+`specs/T4-B1-batch-studio/plan.md` (active slice: T4-B1 — Batch studio: inbox selection mode + bulk generate, reusing T2.4b machinery per proof; P-VII per-proof re-check; no read/schema change).
 <!-- SPECKIT END -->

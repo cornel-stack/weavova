@@ -65,20 +65,24 @@ export function InboxToolbar({
   search,
   sort,
   counts,
+  selecting,
   onStatusChange,
   onTypeChange,
   onSearchChange,
   onSortChange,
+  onToggleSelecting,
 }: {
   status: StatusFilter;
   type: TypeFilter;
   search: string;
   sort: SortKey;
   counts: { shown: number; total: number };
+  selecting: boolean;
   onStatusChange: (value: StatusFilter) => void;
   onTypeChange: (value: TypeFilter) => void;
   onSearchChange: (value: string) => void;
   onSortChange: (value: SortKey) => void;
+  onToggleSelecting: () => void;
 }) {
   return (
     <div>
@@ -87,6 +91,21 @@ export function InboxToolbar({
         <h1 className="font-display text-display-lg text-ink">Proof</h1>
 
         <div className="flex shrink-0 items-center gap-2 self-start">
+          {/* Make clips — the batch selection entry (T4-B1, the cluster T2.2 FR-014c
+              deferred to T4). Toggles selection mode; "Cancel" while selecting. */}
+          <button
+            type="button"
+            onClick={onToggleSelecting}
+            aria-pressed={selecting}
+            className={`inline-flex items-center gap-2 rounded-control px-4 py-2 font-ui text-body-sm font-medium transition-colors duration-200 ease-pressroom focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink ${
+              selecting
+                ? "bg-ink text-paper hover:bg-ink/90"
+                : "border border-rule bg-card text-ink hover:bg-sunken"
+            }`}
+          >
+            {selecting ? "Cancel" : "Make clips"}
+          </button>
+
           {/* Add proof — inert quiet secondary (ink outline). Standalone upload
               entry-point with a committed home (T4/B2); no-op, never errors. */}
           <button

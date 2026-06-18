@@ -1,7 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { ClipFormat } from "@/lib/clip";
 import type { ProofView } from "@/lib/proof";
+import { DEFAULT_FORMAT } from "@/lib/studio";
+import { InboxSelectionBar } from "./inbox-selection-bar";
 import {
   InboxToolbar,
   type SortKey,
@@ -16,12 +19,23 @@ import { InboxWall } from "./inbox-wall";
 // derivation is the pure transform documented in
 // contracts/inbox-derivation.md: status → type → search (AND-combined), then
 // sort. Counts are computed, never fabricated (FR-008/011/019).
+//
+// T4-B1: also owns BATCH SELECTION state — `selecting`, the selected proof-id set,
+// and the one batch format. "Select all ready" selects only granted (visible)
+// proofs; the selection overlay + action bar live in InboxWall / InboxSelectionBar
+// (ProofCard byte-unchanged). Generate is the generateBatch Server Action (P-VII
+// re-checked per proof there).
 
 export function InboxClient({ proofs }: { proofs: ProofView[] }) {
   const [status, setStatus] = useState<StatusFilter>("all");
   const [type, setType] = useState<TypeFilter>("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
+
+  // batch selection
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [format, setFormat] = useState<ClipFormat>(DEFAULT_FORMAT);
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -52,10 +66,41 @@ export function InboxClient({ proofs }: { proofs: ProofView[] }) {
     );
   }, [proofs, status, type, search, sort]);
 
+  // "ready" = visible proofs whose effective consent is granted (selectable).
+  const readyIds = useMemo(
+    () => visible.filter((p) => p.consentState === "granted").map((p) => p.id),
+    [visible],
+  );
+
   function clearFilters() {
     setStatus("all");
     setType("all");
     setSearch("");
+  }
+
+  function toggleSelecting() {
+    setSelecting((s) => {
+      if (s) setSelected(new Set()); // exiting selection clears the set
+      return !s;
+    });
+  }
+
+  function toggleProof(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAllReady() {
+    setSelected(new Set(readyIds));
+  }
+
+  function exitSelection() {
+    setSelected(new Set());
+    setSelecting(false);
   }
 
   return (
@@ -66,10 +111,12 @@ export function InboxClient({ proofs }: { proofs: ProofView[] }) {
         search={search}
         sort={sort}
         counts={{ shown: visible.length, total: proofs.length }}
+        selecting={selecting}
         onStatusChange={setStatus}
         onTypeChange={setType}
         onSearchChange={setSearch}
         onSortChange={setSort}
+        onToggleSelecting={toggleSelecting}
       />
 
       {/* Filtered-empty (distinct from the server no-proof-at-all state): the
@@ -91,7 +138,23 @@ export function InboxClient({ proofs }: { proofs: ProofView[] }) {
           </button>
         </div>
       ) : (
-        <InboxWall proofs={visible} />
+        <InboxWall
+          proofs={visible}
+          selecting={selecting}
+          selected={selected}
+          onToggleProof={toggleProof}
+        />
+      )}
+
+      {selecting && (
+        <InboxSelectionBar
+          selectedIds={[...selected]}
+          readyCount={readyIds.length}
+          format={format}
+          onFormatChange={setFormat}
+          onSelectAllReady={selectAllReady}
+          onExit={exitSelection}
+        />
       )}
     </div>
   );
