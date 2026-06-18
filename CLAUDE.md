@@ -142,25 +142,25 @@ Tiers:
 - **T0** Foundations & rails — scaffold, tokens, schema + fixtures, auth stub, R2 helper, Inngest/Resend, deploy.
 - **T1** Workspace shell — rail, top bar, workspace switcher (24), command palette (14).
 - **T2** The spine — Dashboard → Proof inbox → Proof detail → Clip studio; stubbed generate → sample clip.
-- **T3** Derived-asset surfaces & states — **COMPLETE at T3.1 (Library)**, a one-slice tier. The per-clip
-  **clip detail (T3.2) is DEFERRED → T8** (no design-reference screen + a non-playing stub with no source
-  media pre-T8 → the surface would be thin and likely redesigned once clips are real; the T3.1 Library card
-  already links to the source proof, so deferring leaves no dead control). Empty/loading/error states were
-  delivered across T2.x + T3.1.
+- **T3** Derived-asset surfaces & states — **T3.1 (Library) shipped; T3.2 (clip detail) IN BUILD** (building
+  early, ahead of the rest of T4). No design-reference clip-detail screen exists, so T3.2 is a **derived
+  surface** (proof-detail 03 layout + studio 04 clip framing + render spec); pre-T8 the clip shows as a
+  non-playing labelled "Sample preview" still behind the same UI seam the real render swaps into at T8.
+  Empty/loading/error states delivered across T2.x + T3.1.
 - **T4** Bulk & exports — campaigns, batch studio, upload, export. **← end of the flowing demo.**
 - **T5** Remaining workspace surfaces — brand kits, consent, requests (library shipped at T3.1; **Showcase
   deferred → T9**, its real distribution home — or a static placeholder here if ever wanted).
 - **T6** Identity — real Auth.js, workspaces, onboarding (**first real data**).
 - **T7** Capture — collection page + sources (**first real customer proof**).
-- **T8** Media engine — real render worker (FFmpeg + Revideo), formats, R2 pipeline; **+ the clip detail
-  (deferred from T3.2** — built alongside real clips; inherits the settled `getClip` / `ClipDetailView` read
-  shape + the Q1–Q3 resolutions kept intact in `specs/T3.2-clip-detail/`).
+- **T8** Media engine — real render worker (FFmpeg + Revideo), formats, R2 pipeline. (The clip detail —
+  built early at T3.2 — gets **real clip playback** swapped in here, behind its existing UI seam.)
 - **T9** Monetise & distribute — billing, settings, publishing, **the Showcase (deferred from T3/T5)**,
   public site.
 - **T10** System, polish & launch.
 
-**Current tier: T4 (bulk & exports) next.** Shipped to prod: T0–T2 (the spine, incl. T2.4a schema + T2.4b
-studio) and **T3 (complete at T3.1 Library)**. Deferred: **T3.2 clip detail → T8**; **Showcase → T9**.
+**Current: building T3.2 (clip detail) early, then T4 (bulk & exports).** Shipped to prod: T0–T2 (the spine,
+incl. T2.4a schema + T2.4b studio) and **T3.1 (Library)**. In build: **T3.2 clip detail** (un-deferred,
+built now). Deferred: **Showcase → T9**.
 
 ## 9. Way of working — Spec-Driven Development + guardrails
 
@@ -193,5 +193,5 @@ keyboard-accessible, passes its acceptance criteria, builds green.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/T3.1-library/plan.md` (active slice: T3.1 — Library: the home for generated clips; clips-only read of derived_asset).
+`specs/T3.2-clip-detail/plan.md` (active slice: T3.2 — Clip detail: a generated clip's focused view at /app/clip/[id]; derived surface, no-oracle gate).
 <!-- SPECKIT END -->

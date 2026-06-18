@@ -7,9 +7,9 @@ import { FORMAT_OPTIONS } from "@/lib/studio";
 // clip collection. Shows ONLY owned values: the source customer (the headline —
 // P-II), the brand hook (when set, clearly the brand's words — render spec §7.4),
 // the format, the created date, and an honest "Sample preview" label (clips are
-// stubbed renders pre-T8 — FR-019). The WHOLE card links to the source PROOF
-// (/app/proof/[proofId]) — the one existing destination (A-11 / Q2→C): no clip-detail
-// nav (T3.2 unbuilt), no inline sample play (no real render), no metrics.
+// stubbed renders pre-T8 — FR-019). The WHOLE card links to the CLIP DETAIL
+// (/app/clip/[id]) — its single primary destination (A-11 / Q3; the source-proof
+// link now lives inside the detail as provenance). No inline sample play, no metrics.
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -35,8 +35,8 @@ const ASPECT: Record<ClipFormat, string> = {
 export function LibraryClipCard({ clip }: { clip: LibraryClipView }) {
   return (
     <Link
-      href={`/app/proof/${clip.proofId}`}
-      aria-label={`Open ${clip.customerName}'s proof`}
+      href={`/app/clip/${clip.id}`}
+      aria-label={`Open ${clip.customerName}'s clip`}
       className="group block break-inside-avoid rounded-clip border border-hairline bg-card shadow-clip transition-shadow duration-200 ease-pressroom hover:shadow-lift focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
     >
       {/* clip frame in the chosen format — honest sample stand-in, not a real render */}

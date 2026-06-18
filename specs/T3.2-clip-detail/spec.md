@@ -4,33 +4,28 @@
 
 **Created**: 2026-06-17
 
-**Status**: **DEFERRED → T8 (media engine)** (human decision, 2026-06-18). **Not built in T3.** This spec is
-kept intact as the settled starting point T8 inherits; it is **not** to be planned or implemented until the
-clip detail is built alongside real clips at T8.
+**Status**: **ACTIVE — building now** (human decision, 2026-06-18; un-deferred). Built **early**, ahead of
+the rest of T4, as the second (and now final-by-build-order) T3 surface. Clarifications Q1–Q3 are RESOLVED
+(below); ready for `/speckit.plan`.
 
-**Why deferred** (recorded so the decision survives):
+**Built early (not at T8) — the deferral reasoning and how it's handled now**:
 - **No clip-detail screen exists in `/design-reference`** (the export has the studio 04, Library 09,
-  clipping skeletons 16, Export B4 — none for a per-clip detail), so **P-V cannot apply literally** — it
-  would be a derived surface, not a port.
-- **Pre-T8 the clip is a non-playing stub** and the **fixtures carry no source media**, so the focused
-  detail would be thin (a labelled still + metadata) and **likely redesigned once clips are real** — exactly
-  the rework fixtures-first/port-don't-redesign exist to avoid.
-- **No dead control results from deferring**: the T3.1 Library card already has a **working source-proof
-  destination**, so leaving it pointed there (Q3 not applied yet) leaves nothing inert (A-11 satisfied).
+  clipping skeletons 16, Export B4 — none for a per-clip detail), so **P-V cannot apply literally**: this is
+  a **derived surface**, built faithfully from the proof-detail (03) two-column layout + no-oracle tenant
+  isolation, the studio (04) clip/sample framing, and the render spec — **not** a reinvented design.
+- **Pre-T8 the clip is a non-playing stub** and the **fixtures carry no source media** — handled honestly
+  (Q1): the clip is shown as a **non-playing labelled "Sample preview" still** in the chosen format, an
+  explicit stand-in for the real render (FR-019). The same UI seam swaps in real playback at T8 (so the
+  early build is not throwaway — the T8 media swap stays mechanical, as the studio's stub did).
+- **Q3 completes the A-11 wiring**: the T3.1 Library card (today pointing at the source proof) is re-pointed
+  to this clip detail, and the source-proof link **relocates INTO the detail** as provenance.
 
-**What T8 inherits from this spec** (already settled — start here, don't re-derive):
-- The **read shape**: `getClip` → **one content-free `notFound()`** funnelling **withdrawn / missing /
-  cross-workspace** indistinguishably (P-VII + T2.3 tenant isolation), gated on the shared
-  `effectiveConsentGranted`; and the **additive `ClipDetailView`** projection (clip metadata + source-proof
-  provenance + the **made-under** consent vs the **current** gating consent), with `ClipView`/
-  `LibraryClipView`/existing reads byte-stable.
-- The **Q1–Q3 resolutions** (confirmed 2026-06-18, to be applied at T8): **Q1** a non-playing **labelled
-  sample/preview still** (real playback arrives with the engine); **Q2** route **`/app/clip/[id]`**
-  (top-level, durable canonical URL); **Q3** the Library **card → clip detail**, with the **source-proof
-  link relocated INTO the detail** as provenance (appearance-preserving).
-
-> The Clarifications section below is retained with Q1–Q3 marked RESOLVED so T8 starts from the answers, not
-> the questions. Everything else (requirements, scenarios, success criteria) stands as the T8 starting spec.
+**Settled read shape + resolutions** (start from these; see Requirements + Clarifications): `getClip` → **one
+content-free `notFound()`** funnelling **withdrawn / missing / cross-workspace** indistinguishably (P-VII +
+T2.3 tenant isolation), gated on the shared `effectiveConsentGranted`; the **additive `ClipDetailView`**
+(clip metadata + source-proof provenance + the **made-under** consent vs the **current** gating consent),
+`ClipView`/`LibraryClipView`/existing reads byte-stable. **Q1** non-playing labelled still; **Q2** route
+**`/app/clip/[id]`**; **Q3** card → clip detail with the source-proof link relocated inside.
 
 **Tier**: T3 — Derived-asset surfaces & states (T3.2 — Clip detail; the second T3 slice, the destination
 the T3.1 Library cards graduate to).
