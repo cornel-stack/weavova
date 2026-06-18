@@ -1,5 +1,10 @@
 import { notFound } from "next/navigation";
-import { getProof, getProofClips } from "@/db/queries";
+import {
+  getBrandAssets,
+  getProof,
+  getProofBrandAssets,
+  getProofClips,
+} from "@/db/queries";
 import { ProofDetail } from "./proof-detail";
 
 // The data integrator (async Server, T2.3). Performs the single workspace-scoped
@@ -29,7 +34,21 @@ export async function ProofDetailData({
   // The proof's generated clips (T2.4a) — a separate workspace-scoped read so the
   // T2.3 getProof / ProofDetailView contract stays byte-stable. Withdrawn clips are
   // excluded by the read (P-VII).
-  const clips = await getProofClips(workspaceId, id);
+  // The attached brand assets + the reusable store for the picker (T4-B2) — two more
+  // additive, separate workspace-scoped reads (getProof/getProofClips stay byte-
+  // stable). Brand assets are owned footage, OUTSIDE the consent model (P-VII).
+  const [clips, attachedBrandAssets, storeAssets] = await Promise.all([
+    getProofClips(workspaceId, id),
+    getProofBrandAssets(workspaceId, id),
+    getBrandAssets(workspaceId),
+  ]);
 
-  return <ProofDetail proof={proof} clips={clips} />;
+  return (
+    <ProofDetail
+      proof={proof}
+      clips={clips}
+      attachedBrandAssets={attachedBrandAssets}
+      storeAssets={storeAssets}
+    />
+  );
 }

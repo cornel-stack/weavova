@@ -162,3 +162,69 @@ export const derivedAsset = pgTable(
     index("derived_asset_proof_idx").on(t.proofId),
   ],
 );
+
+// Closed, stable domain for the brand's OWN footage (T4-B2) → Postgres enum.
+// Mirrors the derivedAssetKindEnum/clipFormatEnum pattern. Extensible by migration.
+export const brandAssetKindEnum = pgEnum("brand_asset_kind", [
+  "product", // a product video
+  "broll", // b-roll / supporting footage
+]);
+
+// A brand-OWNED clip in the reusable store (T4-B2 — the brand's own product video /
+// b-roll). Workspace-scoped, uploaded ONCE and reusable across many proofs. This is
+// the brand's OWN footage — NOT customer proof: it sits OUTSIDE the consent model
+// (no consentId, no FK to `consent`), is never counted as proof (FR-019), and is
+// SUPPORTING CONTEXT for the eventual render, never the headline (P-II). `assetUrl`
+// is a REAL R2 object (a presigned direct upload), distinct from the stubbed
+// `SAMPLE_CLIP_URL` clip seam. The T8 composite (weaving this into a clip) is NOT
+// modelled here — that is the render engine.
+export const brandAsset = pgTable(
+  "brand_asset",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    kind: brandAssetKindEnum("kind").notNull(),
+    label: text("label").notNull(), // owner-authored, free text
+    assetUrl: text("asset_url").notNull(), // the real R2 object URL
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("brand_asset_ws_created_idx").on(t.workspaceId, t.createdAt.desc()),
+  ],
+);
+
+// The many-to-many attach (T4-B2): one brand asset → many proofs, one proof → many
+// brand assets. Workspace-scoped; UNIQUE on (proofId, brandAssetId) so attaching the
+// same asset to the same proof is idempotent (no duplicate row). The join carries NO
+// consent reference — attaching owned footage never touches the consent gate (P-VII);
+// a withdrawn proof still cannot generate a clip, asset attached or not. Detach =
+// delete the join row only (the asset and other proofs' attachments survive).
+// Delete-from-store is a CONSCIOUS DEFERRAL (Q2:A — block-while-attached + R2 object
+// cleanup, later); B2 ships no asset delete.
+export const proofBrandAsset = pgTable(
+  "proof_brand_asset",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    proofId: uuid("proof_id")
+      .notNull()
+      .references(() => proof.id, { onDelete: "cascade" }),
+    brandAssetId: uuid("brand_asset_id")
+      .notNull()
+      .references(() => brandAsset.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("proof_brand_asset_unique").on(t.proofId, t.brandAssetId),
+    index("proof_brand_asset_proof_idx").on(t.proofId),
+    index("proof_brand_asset_brand_asset_idx").on(t.brandAssetId),
+  ],
+);

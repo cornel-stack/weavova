@@ -1,13 +1,16 @@
 "use client";
 
 import { Command } from "cmdk";
-import { Inbox, Send } from "lucide-react";
+import { Clapperboard, Inbox, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/nav";
 
 const ACTIONS = [
   { label: "Request proof", href: "/app/requests", icon: Send },
   { label: "Make a clip", href: "/app/proof", icon: Inbox },
+  // The footage store is a derived surface (no rail slot — the rail stays the
+  // 8-destination port). It's reachable here + from the proof-detail attach picker.
+  { label: "Brand footage", href: "/app/footage", icon: Clapperboard },
 ];
 
 export function CommandPalette({

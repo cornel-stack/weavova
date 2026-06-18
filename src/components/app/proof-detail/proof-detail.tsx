@@ -1,7 +1,12 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import type {
+  BrandAssetView,
+  ProofBrandAssetView,
+} from "@/lib/brand-asset";
 import type { ClipView } from "@/lib/clip";
 import type { ProofDetailView } from "@/lib/proof";
+import { AttachedBrandAssets } from "./attached-brand-assets";
 import { ProofDetailActions } from "./proof-detail-actions";
 import { ProofDetailConsent } from "./proof-detail-consent";
 import { ProofDetailGeneratedAssets } from "./proof-detail-generated-assets";
@@ -20,9 +25,13 @@ import { ProofDetailMeta } from "./proof-detail-meta";
 export function ProofDetail({
   proof,
   clips,
+  attachedBrandAssets,
+  storeAssets,
 }: {
   proof: ProofDetailView;
   clips: ClipView[];
+  attachedBrandAssets: ProofBrandAssetView[];
+  storeAssets: BrandAssetView[];
 }) {
   const isMedia = proof.proofType !== "text";
   const words = isMedia ? proof.transcript : proof.quote;
@@ -51,6 +60,11 @@ export function ProofDetail({
             </blockquote>
           )}
           <ProofDetailGeneratedAssets clips={clips} />
+          <AttachedBrandAssets
+            proofId={proof.id}
+            attached={attachedBrandAssets}
+            storeAssets={storeAssets}
+          />
         </div>
 
         {/* side panel — provenance, consent, the one action */}

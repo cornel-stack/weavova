@@ -1,7 +1,15 @@
 import { and, asc, desc, eq, sql, type AnyColumn } from "drizzle-orm";
 import { getDb } from "./client";
 import { withDbRetry } from "./with-retry";
-import { consent, derivedAsset, proof, source, workspace } from "./schema";
+import {
+  brandAsset,
+  consent,
+  derivedAsset,
+  proof,
+  proofBrandAsset,
+  source,
+  workspace,
+} from "./schema";
 import {
   SAMPLE_CLIP_URL,
   type ClipDetailView,
@@ -9,6 +17,11 @@ import {
   type ClipView,
   type LibraryClipView,
 } from "@/lib/clip";
+import type {
+  BrandAssetKind,
+  BrandAssetView,
+  ProofBrandAssetView,
+} from "@/lib/brand-asset";
 import type { ConsentState, ProofDetailView, ProofView } from "@/lib/proof";
 import type { ShowcaseItem } from "@/lib/showcase";
 
@@ -591,4 +604,162 @@ export async function getShowcase(
   });
 
   return items;
+}
+
+// ============================================================================
+// Brand-asset store (T4-B2). The brand's OWN reusable footage + the many-to-many
+// proof attach. These sit ENTIRELY OUTSIDE the consent model (P-VII): a brand
+// asset is owned footage, not customer proof — no consent join, no effective-
+// consent gate. The clip-generation gate (getGrantedConsentId) is UNCHANGED and
+// remains the SOLE gate; nothing here touches it. Owned fields only — a brand
+// asset is never counted as, or returned as, customer proof (FR-019).
+//
+// Reads are withDbRetry-wrapped (safe to retry). Writes are SINGLE-ATTEMPT (D4 —
+// not retry-wrapped; a blind retry on a transient error could double-write).
+// ============================================================================
+
+// The reusable store list — all of the workspace's owned brand assets, newest
+// first (brand_asset_ws_created_idx). Owned footage, never proof (FR-019).
+export async function getBrandAssets(
+  workspaceId: string,
+): Promise<BrandAssetView[]> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        id: brandAsset.id,
+        kind: brandAsset.kind,
+        label: brandAsset.label,
+        assetUrl: brandAsset.assetUrl,
+        createdAt: brandAsset.createdAt,
+      })
+      .from(brandAsset)
+      .where(eq(brandAsset.workspaceId, workspaceId))
+      .orderBy(desc(brandAsset.createdAt));
+
+    return rows.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      label: row.label,
+      assetUrl: row.assetUrl,
+      createdAt: row.createdAt.toISOString(),
+    }));
+  });
+}
+
+// The brand assets ATTACHED to one proof (join ⨝ brand_asset), newest-attached
+// first — for the proof detail's additive "Attached brand assets" section. NO
+// consent gate (attaching owned footage is consent-free; the proof's own consent
+// still governs clip generation elsewhere, unchanged). Separate read so getProof /
+// getProofClips and their view shapes stay byte-stable.
+export async function getProofBrandAssets(
+  workspaceId: string,
+  proofId: string,
+): Promise<ProofBrandAssetView[]> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        attachmentId: proofBrandAsset.id,
+        attachedAt: proofBrandAsset.createdAt,
+        id: brandAsset.id,
+        kind: brandAsset.kind,
+        label: brandAsset.label,
+        assetUrl: brandAsset.assetUrl,
+        createdAt: brandAsset.createdAt,
+      })
+      .from(proofBrandAsset)
+      .innerJoin(brandAsset, eq(proofBrandAsset.brandAssetId, brandAsset.id))
+      .where(
+        and(
+          eq(proofBrandAsset.workspaceId, workspaceId),
+          eq(proofBrandAsset.proofId, proofId),
+        ),
+      )
+      .orderBy(desc(proofBrandAsset.createdAt));
+
+    return rows.map((row) => ({
+      attachmentId: row.attachmentId,
+      attachedAt: row.attachedAt.toISOString(),
+      id: row.id,
+      kind: row.kind,
+      label: row.label,
+      assetUrl: row.assetUrl,
+      createdAt: row.createdAt.toISOString(),
+    }));
+  });
+}
+
+// Persist one owned brand asset AFTER the browser's direct PUT to R2 succeeds
+// (T4-B2). SINGLE attempt (D4 — not retry-wrapped). No consent involvement.
+export async function createBrandAsset(values: {
+  workspaceId: string;
+  kind: BrandAssetKind;
+  label: string;
+  assetUrl: string;
+}): Promise<BrandAssetView> {
+  const [row] = await getDb()
+    .insert(brandAsset)
+    .values({
+      workspaceId: values.workspaceId,
+      kind: values.kind,
+      label: values.label,
+      assetUrl: values.assetUrl,
+    })
+    .returning({
+      id: brandAsset.id,
+      kind: brandAsset.kind,
+      label: brandAsset.label,
+      assetUrl: brandAsset.assetUrl,
+      createdAt: brandAsset.createdAt,
+    });
+  return {
+    id: row.id,
+    kind: row.kind,
+    label: row.label,
+    assetUrl: row.assetUrl,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+// Attach a brand asset to a proof (T4-B2). IDEMPOTENT via the (proofId,
+// brandAssetId) unique index: a duplicate attach does nothing and reports
+// "already_attached". Workspace-scoped (the caller verifies both ids belong to the
+// workspace). SINGLE attempt (D4). No consent check — owned footage is consent-free.
+export async function attachBrandAsset(values: {
+  workspaceId: string;
+  proofId: string;
+  brandAssetId: string;
+}): Promise<{ status: "attached" | "already_attached" }> {
+  const inserted = await getDb()
+    .insert(proofBrandAsset)
+    .values({
+      workspaceId: values.workspaceId,
+      proofId: values.proofId,
+      brandAssetId: values.brandAssetId,
+    })
+    .onConflictDoNothing({
+      target: [proofBrandAsset.proofId, proofBrandAsset.brandAssetId],
+    })
+    .returning({ id: proofBrandAsset.id });
+  return inserted.length > 0
+    ? { status: "attached" }
+    : { status: "already_attached" };
+}
+
+// Detach a brand asset from a proof (T4-B2, Q2:A) — delete the JOIN ROW ONLY. The
+// brand asset and any other proof's attachment are untouched. Workspace-scoped.
+// SINGLE attempt (D4). Delete-from-store is a conscious deferral (no asset delete).
+export async function detachBrandAsset(values: {
+  workspaceId: string;
+  proofId: string;
+  brandAssetId: string;
+}): Promise<void> {
+  await getDb()
+    .delete(proofBrandAsset)
+    .where(
+      and(
+        eq(proofBrandAsset.workspaceId, values.workspaceId),
+        eq(proofBrandAsset.proofId, values.proofId),
+        eq(proofBrandAsset.brandAssetId, values.brandAssetId),
+      ),
+    );
 }

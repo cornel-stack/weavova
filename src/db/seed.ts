@@ -1,8 +1,10 @@
 import { getDb } from "./client.ts";
 import {
+  brandAsset,
   consent,
   derivedAsset,
   proof,
+  proofBrandAsset,
   source,
   workspace,
   type SourceKind,
@@ -129,14 +131,44 @@ const CLIPS: ClipFixture[] = [
   { customerName: "Leo M.", consentVersion: 1, format: "9x16", hook: "Still going strong months later.", createdAt: ago(10) },
 ];
 
+// Brand assets (T4-B2) — the brand's OWN footage in the reusable store. These are
+// NOT customer proof: they sit OUTSIDE the consent model and are never counted as
+// proof (FR-019). `assetUrl` is an HONEST PLACEHOLDER (a distinct r2:// namespace,
+// NOT SAMPLE_CLIP_URL) — rendered everywhere as a metadata card, never a video /
+// thumbnail (A-11). Real objects arrive via the live presigned-PUT upload.
+type BrandAssetFixture = {
+  kind: "product" | "broll";
+  label: string;
+  assetUrl: string;
+  createdAt: string; // ISO (relative)
+};
+const BRAND_ASSETS: BrandAssetFixture[] = [
+  { kind: "product", label: "Candle pour — close up", assetUrl: "r2://weavova-brand-assets/sample-candle-pour.mp4", createdAt: ago(7) },
+  { kind: "broll", label: "Studio shelves — slow pan", assetUrl: "r2://weavova-brand-assets/sample-studio-shelves.mp4", createdAt: ago(12) },
+  { kind: "product", label: "Gift set — unboxing", assetUrl: "r2://weavova-brand-assets/sample-gift-unboxing.mp4", createdAt: ago(20) },
+];
+
+// A couple of attachments (many-to-many): owned footage attached to GRANTED proofs
+// as supporting context. The attach NEVER touches consent (P-VII); a withdrawn
+// proof still can't generate a clip, asset attached or not. (label → proof customer)
+type AttachmentFixture = { assetLabel: string; customerName: string };
+const ATTACHMENTS: AttachmentFixture[] = [
+  { assetLabel: "Candle pour — close up", customerName: "Maria L." },
+  { assetLabel: "Studio shelves — slow pan", customerName: "Maria L." },
+  { assetLabel: "Candle pour — close up", customerName: "Aisha K." },
+];
+
 async function seed() {
   const db = getDb();
 
-  // Reset (FK-safe order) so the seed is re-runnable. derived_asset first (it
-  // references proof/consent/workspace).
+  // Reset (FK-safe order) so the seed is re-runnable. The join + derived_asset
+  // first (they reference proof/brand_asset/consent/workspace), then brand_asset
+  // (before workspace), then the rest.
   await db.delete(derivedAsset);
+  await db.delete(proofBrandAsset);
   await db.delete(consent);
   await db.delete(proof);
+  await db.delete(brandAsset);
   await db.delete(source);
   await db.delete(workspace);
 
@@ -219,8 +251,39 @@ async function seed() {
     clipCount += 1;
   }
 
+  // Brand assets (owned footage) + the many-to-many attachments (T4-B2). Owned,
+  // never proof; the attach is consent-free.
+  const brandAssetIdByLabel = new Map<string, string>();
+  let brandAssetCount = 0;
+  for (const a of BRAND_ASSETS) {
+    const [row] = await db
+      .insert(brandAsset)
+      .values({
+        workspaceId: ws.id,
+        kind: a.kind,
+        label: a.label,
+        assetUrl: a.assetUrl,
+        createdAt: new Date(a.createdAt),
+      })
+      .returning({ id: brandAsset.id });
+    brandAssetIdByLabel.set(a.label, row.id);
+    brandAssetCount += 1;
+  }
+
+  let attachmentCount = 0;
+  for (const att of ATTACHMENTS) {
+    const proofId = proofIdByCustomer.get(att.customerName)!;
+    const brandAssetId = brandAssetIdByLabel.get(att.assetLabel)!;
+    await db.insert(proofBrandAsset).values({
+      workspaceId: ws.id,
+      proofId,
+      brandAssetId,
+    });
+    attachmentCount += 1;
+  }
+
   console.log(
-    `seeded: workspace=1 sources=${SOURCES.length} proofs=${proofCount} consent=${consentCount} clips=${clipCount}`,
+    `seeded: workspace=1 sources=${SOURCES.length} proofs=${proofCount} consent=${consentCount} clips=${clipCount} brandAssets=${brandAssetCount} attachments=${attachmentCount}`,
   );
 }
 
