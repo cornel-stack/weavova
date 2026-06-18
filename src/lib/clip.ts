@@ -4,6 +4,7 @@
 // view/reach/engagement metric (FR-019).
 
 import type { clipFormatEnum, derivedAssetKindEnum } from "@/db/schema";
+import type { ConsentState, ProofType } from "@/lib/proof";
 
 export type DerivedAssetKind = (typeof derivedAssetKindEnum)["enumValues"][number];
 
@@ -33,6 +34,44 @@ export interface LibraryClipView extends ClipView {
   customerName: string;
   /** the "verified real customer" mark (owned) */
   verified: boolean;
+}
+
+// The clip-detail shape (T3.2). A NEW projection — the owned clip metadata + the
+// source-proof provenance + TWO consent roles: the MADE-UNDER consent (provenance —
+// the version the clip was generated under, via derived_asset.consentId) and the
+// proof's CURRENT effective consent (the visibility gate — always 'granted' when the
+// clip is viewable). `ClipView`/`LibraryClipView` stay byte-unchanged; this is
+// additive. Owned fields only — never a view/reach/engagement/performance metric
+// (FR-019).
+export interface ClipDetailView {
+  id: string;
+  kind: DerivedAssetKind;
+  format: ClipFormat;
+  /** brand-authored hook (owned provenance), shown when set */
+  hook: string | null;
+  /** stored (stubbed) sample-clip reference — the non-playing "Sample preview" still */
+  assetUrl: string;
+  /** ISO date the clip was created */
+  createdAt: string;
+  // source-proof provenance
+  /** source proof id — the in-detail source-proof link + re-make studio target */
+  proofId: string;
+  customerName: string;
+  proofType: ProofType;
+  verified: boolean;
+  /** capture source label */
+  source: string;
+  // consent — provenance (made-under) vs the current effective gate
+  /** the consent version the clip was MADE UNDER (provenance) */
+  madeUnderVersion: number;
+  /** ISO date of that made-under consent (its grantedAt); null if absent */
+  madeUnderAt: string | null;
+  /** the proof's CURRENT effective consent state (the gate; granted when viewable) */
+  consentState: ConsentState;
+  /** current effective consent version; null if no consent row */
+  consentVersion: number | null;
+  /** ISO current effective consent date; null when none applies */
+  consentAt: string | null;
 }
 
 // The stubbed render's pre-made sample clip in R2 (CLAUDE.md §3). Extracted here

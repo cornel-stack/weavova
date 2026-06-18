@@ -4,6 +4,7 @@ import { withDbRetry } from "./with-retry";
 import { consent, derivedAsset, proof, source, workspace } from "./schema";
 import {
   SAMPLE_CLIP_URL,
+  type ClipDetailView,
   type ClipFormat,
   type ClipView,
   type LibraryClipView,
@@ -452,5 +453,89 @@ export async function getLibraryClips(
       hook: row.hook,
       createdAt: row.createdAt.toISOString(),
     }));
+  });
+}
+
+// ============================================================================
+// Clip detail read (T3.2). A single clip's focused view by id — workspace-scoped
+// and consent-withdrawal-GATED via the SHARED effectiveConsentGranted. Joins proof
+// + source (provenance) + the MADE-UNDER consent row (via derived_asset.consentId)
+// and reuses the existing current-effective-consent subqueries (the gate role).
+//
+// THREE-INTO-ONE NULL (no oracle): a missing id, a cross-workspace id, AND a
+// withdrawn clip (source proof's effective consent not 'granted') ALL yield no row →
+// null → the caller's one content-free notFound(). The viewer cannot tell which
+// (T2.3 tenant-isolation property, extended to withdrawal — P-VII). Withheld rows
+// are retained (read-time gate, not a delete). Owned fields only (FR-019). The proof
+// reads + the T2.4a/T3.1 clip reads above are byte-unchanged; only this is added.
+// ============================================================================
+
+export async function getClip(
+  workspaceId: string,
+  clipId: string,
+): Promise<ClipDetailView | null> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        id: derivedAsset.id,
+        kind: derivedAsset.kind,
+        format: derivedAsset.format,
+        hook: derivedAsset.hook,
+        assetUrl: derivedAsset.assetUrl,
+        createdAt: derivedAsset.createdAt,
+        proofId: derivedAsset.proofId,
+        customerName: proof.customerName,
+        proofType: proof.proofType,
+        verified: proof.verified,
+        source: source.label,
+        // made-under provenance (the consent version the clip was generated under)
+        madeUnderVersion: consent.version,
+        madeUnderAt: consent.grantedAt,
+        // current effective consent (the gate) — reuse the existing subqueries
+        consentState: latestConsentState,
+        consentVersion: latestConsentVersion,
+        consentEffectiveAt: latestConsentEffectiveAt,
+      })
+      .from(derivedAsset)
+      .innerJoin(proof, eq(derivedAsset.proofId, proof.id))
+      .innerJoin(source, eq(proof.sourceId, source.id))
+      .innerJoin(consent, eq(consent.id, derivedAsset.consentId))
+      .where(
+        and(
+          eq(derivedAsset.id, clipId),
+          eq(proof.workspaceId, workspaceId),
+          effectiveConsentGranted(derivedAsset.proofId),
+        ),
+      )
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      kind: row.kind,
+      format: row.format,
+      hook: row.hook,
+      assetUrl: row.assetUrl,
+      createdAt: row.createdAt.toISOString(),
+      proofId: row.proofId,
+      customerName: row.customerName,
+      proofType: row.proofType,
+      verified: row.verified,
+      source: row.source,
+      madeUnderVersion: Number(row.madeUnderVersion),
+      madeUnderAt: row.madeUnderAt
+        ? new Date(row.madeUnderAt).toISOString()
+        : null,
+      // gate guarantees granted when a row is returned; coalesce defensively
+      consentState: row.consentState ?? "granted",
+      consentVersion:
+        row.consentVersion == null ? null : Number(row.consentVersion),
+      consentAt:
+        row.consentEffectiveAt == null
+          ? null
+          : new Date(row.consentEffectiveAt).toISOString(),
+    };
   });
 }
