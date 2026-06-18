@@ -195,5 +195,5 @@ keyboard-accessible, passes its acceptance criteria, builds green.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/T4-B1-batch-studio/plan.md` (active slice: T4-B1 — Batch studio: inbox selection mode + bulk generate, reusing T2.4b machinery per proof; P-VII per-proof re-check; no read/schema change).
+`specs/T4-B2-brand-asset-store/plan.md` (active slice: T4-B2 — Brand-asset store: reusable workspace-scoped store of brand-OWNED clips (real R2 upload) attachable many-to-many to proof; additive schema (brand_asset + proof_brand_asset + brand_asset_kind enum, migration 0002); P-VII unchanged (brand assets sit OUTSIDE the consent gate; getGrantedConsentId stays the sole gen gate); honest T8-composite seam; ProofCard/read-shapes/generateClip/generateBatch byte-stable. PLAN done — two decisions await ratification before implement: R2 mechanism + first new dep (research.md §1), nav entry for the derived route (§2)).
 <!-- SPECKIT END -->
