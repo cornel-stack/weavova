@@ -7,6 +7,7 @@ import {
   Store,
 } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { ClipDetailView, ClipFormat } from "@/lib/clip";
 import type { ConsentState, ProofType } from "@/lib/proof";
 import { FORMAT_OPTIONS } from "@/lib/studio";
@@ -59,7 +60,14 @@ const CONSENT_LABEL: Record<ConsentState, string> = {
   revoked: "Consent revoked",
 };
 
-export function ClipDetail({ clip }: { clip: ClipDetailView }) {
+export function ClipDetail({
+  clip,
+  exportAction,
+}: {
+  clip: ClipDetailView;
+  /** additive slot (T4-B4) — the post-text copy island, rendered in the action area; optional so the existing render path is byte-stable */
+  exportAction?: ReactNode;
+}) {
   const currentConsentMeta = [
     clip.consentAt ? formatDate(clip.consentAt) : null,
     clip.consentVersion != null ? `v${clip.consentVersion}` : null,
@@ -200,6 +208,9 @@ export function ClipDetail({ clip }: { clip: ClipDetailView }) {
             <Scissors className="size-4" strokeWidth={1.5} aria-hidden />
             Re-make in studio
           </Link>
+
+          {/* additive (T4-B4) — copy the owned post-text package (A-11) */}
+          {exportAction}
         </aside>
       </div>
     </div>
