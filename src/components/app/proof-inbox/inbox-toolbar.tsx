@@ -7,17 +7,16 @@ import { Plus, Search } from "lucide-react";
 // and the count. All interactive state is owned by InboxClient and passed in via
 // props/setters — this component is the presentation of that state.
 //
-// Port-completeness (A-11): "Newest" works / "Warmest" is a disabled "coming
-// soon" option in the working sort; "Request proof" + "Add proof" are inert
-// standalone entry-points. The Wall/List toggle, "Make clips", and "Select all
-// ready" are NOT rendered (deferred whole to T4 — they are dead/undesigned or
-// coupled to a selection model the byte-unchanged ProofCard does not carry).
+// Port-completeness (A-11): both sorts now WORK — "Warmest" was a disabled "coming
+// soon" stub (T2.2) and is made real at T4-B3; "Request proof" + "Add proof" are
+// inert standalone entry-points. The Wall/List toggle is NOT rendered ("Make clips"
+// / "Select all ready" shipped at T4-B1).
 
 export type StatusFilter = "all" | "new" | "reviewed" | "awaiting";
 export type TypeFilter = "all" | "video" | "text" | "photo" | "audio";
-// "warmest" is shown in the UI but DISABLED — it can never be a value here (the
-// real warmth ranking is T4/B3, gated on a signal the schema does not carry).
-export type SortKey = "newest";
+// Both sorts are real (T4-B3 made Warmest live). Newest = capturedAt desc; Warmest =
+// content-readiness, computed read-time from owned facts (src/lib/warmth.ts).
+export type SortKey = "newest" | "warmest";
 
 const STATUS_CHIPS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -64,6 +63,7 @@ export function InboxToolbar({
   type,
   search,
   sort,
+  warmthLoading,
   counts,
   selecting,
   onStatusChange,
@@ -76,6 +76,7 @@ export function InboxToolbar({
   type: TypeFilter;
   search: string;
   sort: SortKey;
+  warmthLoading: boolean;
   counts: { shown: number; total: number };
   selecting: boolean;
   onStatusChange: (value: StatusFilter) => void;
@@ -160,25 +161,39 @@ export function InboxToolbar({
           ))}
         </div>
 
-        {/* sort — Newest working, Warmest disabled "coming soon" (A-11/FR-010) */}
+        {/* sort — both real (T4-B3 made Warmest live). "Computing warmth…" shows
+            while the un-tapped signal loads on opt-in, so the control is never read
+            as dead (A-11). */}
         <label className="ml-auto inline-flex items-center gap-2 rounded-control border border-hairline bg-card px-3 py-1.5 font-ui text-body-sm text-ink-2 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ink">
           <span className="text-ink-3">Sort ·</span>
           <select
             value={sort}
             onChange={(event) => {
-              // "warmest" is disabled and unreachable; guard so sort is only ever
-              // the working "newest" (no fabricated/proxy ordering — FR-019).
-              if (event.target.value === "newest") onSortChange("newest");
+              const value = event.target.value;
+              if (value === "newest" || value === "warmest") onSortChange(value);
             }}
             className="bg-card font-ui text-body-sm font-medium text-ink focus:outline-none"
           >
             <option value="newest">Newest</option>
-            <option value="warmest" disabled>
-              Warmest — coming soon
-            </option>
+            <option value="warmest">Warmest</option>
           </select>
+          {sort === "warmest" && warmthLoading && (
+            <span className="font-ui text-body-sm text-ink-3" aria-live="polite">
+              · Computing warmth…
+            </span>
+          )}
         </label>
       </div>
+
+      {/* honesty copy (T4-B3) — warmth = content-readiness from owned signals, never
+          an engagement/conversion prediction (FR-008/FR-019). Shown only on Warmest. */}
+      {sort === "warmest" && (
+        <p className="mt-3 max-w-reading font-ui text-body-sm text-ink-3">
+          Warmest puts the proof most ready to become content first — recent, with a
+          full quote or media, and not yet clipped. It reads your own proof, not views
+          or engagement.
+        </p>
+      )}
 
       {/* search */}
       <div className="mt-4">

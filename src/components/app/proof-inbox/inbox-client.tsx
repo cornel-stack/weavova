@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { getInboxClipStatus } from "@/app/app/proof/warmth-actions";
 import type { ClipFormat } from "@/lib/clip";
 import type { ProofView } from "@/lib/proof";
 import { DEFAULT_FORMAT } from "@/lib/studio";
+import { sortByWarmth } from "@/lib/warmth";
 import { InboxSelectionBar } from "./inbox-selection-bar";
 import {
   InboxToolbar,
@@ -32,10 +34,37 @@ export function InboxClient({ proofs }: { proofs: ProofView[] }) {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
 
+  // warmth (T4-B3) — the un-tapped signal's clip-status is fetched OPT-IN-LAZILY:
+  // tappedIds starts null and the action fires only on the first toggle to Warmest,
+  // so the default Newest path never reads it. Cached after the first fetch.
+  const [tappedIds, setTappedIds] = useState<Set<string> | null>(null);
+  const [warmthLoading, setWarmthLoading] = useState(false);
+
   // batch selection
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [format, setFormat] = useState<ClipFormat>(DEFAULT_FORMAT);
+
+  // Switch sort; on the FIRST switch to Warmest, lazily load the clip-status signal.
+  // While in flight (tappedIds still null) the visible memo falls back to the Newest
+  // order — never a partial warmth computed without the un-tapped fact. On failure,
+  // leave tappedIds null → honest recency fallback (no crash). Cached: a later toggle
+  // re-sorts without re-fetching.
+  const handleSortChange = useCallback(
+    (value: SortKey) => {
+      setSort(value);
+      if (value === "warmest" && tappedIds === null && !warmthLoading) {
+        setWarmthLoading(true);
+        getInboxClipStatus()
+          .then((ids) => setTappedIds(new Set(ids)))
+          .catch(() => {
+            // honest recency fallback — warmth stays Newest-ordered, control re-enabled
+          })
+          .finally(() => setWarmthLoading(false));
+      }
+    },
+    [tappedIds, warmthLoading],
+  );
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -59,12 +88,16 @@ export function InboxClient({ proofs }: { proofs: ProofView[] }) {
       return true;
     });
 
-    // sort: "newest" → capturedAt descending (ISO strings compare chronologically).
-    // "warmest" is disabled and never a value here, so it is never applied.
-    return [...filtered].sort((a, b) =>
-      sort === "newest" ? b.capturedAt.localeCompare(a.capturedAt) : 0,
-    );
-  }, [proofs, status, type, search, sort]);
+    // Filter first (above), then order — so the visible COUNT is identical to the
+    // Newest view of the same filters (warmth orders, never filters — FR-005/006).
+    // Warmest applies ONLY once the un-tapped signal has loaded; while it is null
+    // (in flight or failed) we fall back to the byte-identical Newest order — never a
+    // fabricated warmth without the clip-status fact.
+    if (sort === "warmest" && tappedIds !== null) {
+      return sortByWarmth(filtered, tappedIds);
+    }
+    return [...filtered].sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
+  }, [proofs, status, type, search, sort, tappedIds]);
 
   // "ready" = visible proofs whose effective consent is granted (selectable).
   const readyIds = useMemo(
@@ -110,12 +143,13 @@ export function InboxClient({ proofs }: { proofs: ProofView[] }) {
         type={type}
         search={search}
         sort={sort}
+        warmthLoading={warmthLoading}
         counts={{ shown: visible.length, total: proofs.length }}
         selecting={selecting}
         onStatusChange={setStatus}
         onTypeChange={setType}
         onSearchChange={setSearch}
-        onSortChange={setSort}
+        onSortChange={handleSortChange}
         onToggleSelecting={toggleSelecting}
       />
 

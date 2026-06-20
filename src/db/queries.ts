@@ -133,6 +133,25 @@ export async function getProofs(workspaceId: string): Promise<ProofView[]> {
   });
 }
 
+// Clip status per proof (T4-B3) — the proofIds in the workspace that have ≥1 derived
+// clip ("tapped"). The un-tapped warmth signal's input — the ONE owned fact not on
+// ProofView. ADDITIVE: getProofs/ProofView and every other read are byte-unchanged;
+// this returns a plain id list (the client builds a Set for O(1) lookups). NOT
+// consent-filtered — "tapped" is a provenance fact (a clip was made from this proof);
+// withdrawn proof is ranked cold by warmth's consent gate regardless. Fired ONLY on
+// opt-in to Warmest (via the getInboxClipStatus action), never on the default path.
+export async function getProofClipStatus(
+  workspaceId: string,
+): Promise<string[]> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .selectDistinct({ proofId: derivedAsset.proofId })
+      .from(derivedAsset)
+      .where(eq(derivedAsset.workspaceId, workspaceId));
+    return rows.map((row) => row.proofId);
+  });
+}
+
 // ── Proof detail projection (T2.3) ──────────────────────────────────────────
 // getProof returns ProofDetailView = ProofView + the effective (latest-version)
 // consent's version + effective date, so the detail shows "granted · {date} · v{n}"
