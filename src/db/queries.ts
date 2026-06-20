@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql, type AnyColumn } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql, type AnyColumn } from "drizzle-orm";
 import { getDb } from "./client";
 import { withDbRetry } from "./with-retry";
 import {
@@ -24,6 +24,7 @@ import type {
 } from "@/lib/brand-asset";
 import type { ConsentState, ProofDetailView, ProofView } from "@/lib/proof";
 import type { ShowcaseItem } from "@/lib/showcase";
+import { sampleVideoRef, type PostTextPackage } from "@/lib/export";
 
 export type Workspace = typeof workspace.$inferSelect;
 
@@ -762,4 +763,122 @@ export async function detachBrandAsset(values: {
         eq(proofBrandAsset.brandAssetId, values.brandAssetId),
       ),
     );
+}
+
+// ============================================================================
+// Export reads (T4-B4). The owned POST-TEXT package a clip leaves the app as —
+// the demo loop's payoff. ADDITIVE: getClip/getLibraryClips and their view shapes
+// (ClipDetailView/LibraryClipView) are byte-unchanged; these are NEW projections
+// beside them. Each carries the customer's VERBATIM proof (quote ?? transcript) —
+// the headline (P-II) — which the existing clip reads do NOT project.
+//
+// CONSENT (P-VII): both reuse the SHARED `effectiveConsentGranted` predicate — the
+// SAME gate the dashboard/Library/detail use. A withdrawn / missing / cross-workspace
+// clip yields no row (the three-into-one no-oracle opacity of getClip). No new gate.
+// The video is NEVER a finished clip here — sampleVideoRef() is the labeled T8 seam
+// (FR-019 / Q2:A). The select uses the existing derived_asset ⨝ proof ⨝ source join.
+// ============================================================================
+
+const exportColumns = {
+  clipId: derivedAsset.id,
+  proofId: derivedAsset.proofId,
+  format: derivedAsset.format,
+  hook: derivedAsset.hook,
+  createdAt: derivedAsset.createdAt,
+  customerName: proof.customerName,
+  verified: proof.verified,
+  proofType: proof.proofType,
+  quote: proof.quote,
+  transcript: proof.transcript,
+  source: source.label,
+};
+
+type ExportRow = {
+  clipId: string;
+  proofId: string;
+  format: ClipFormat;
+  hook: string | null;
+  createdAt: Date;
+  customerName: string;
+  verified: boolean;
+  proofType: ProofView["proofType"];
+  quote: string | null;
+  transcript: string | null;
+  source: string;
+};
+
+function toPostTextPackage(row: ExportRow): PostTextPackage {
+  return {
+    clipId: row.clipId,
+    proofId: row.proofId,
+    // the customer's VERBATIM words — quote ?? transcript; null when neither exists
+    // (e.g. some photo proofs) — never fabricated (P-II / FR-002).
+    headline: row.quote ?? row.transcript ?? null,
+    hook: row.hook,
+    customerName: row.customerName,
+    verified: row.verified,
+    source: row.source,
+    proofType: row.proofType,
+    format: row.format,
+    createdAt: row.createdAt.toISOString(),
+    sampleVideo: sampleVideoRef(),
+  };
+}
+
+// One clip's post-text package by id — workspace-scoped + consent-withdrawal GATED
+// via the shared effectiveConsentGranted. Returns null for missing / cross-workspace
+// / withdrawn (no oracle). Used to assemble the single-export copy text at clip-detail
+// render (the page is already consent-gated, so this is the same-gated companion).
+export async function getClipExport(
+  workspaceId: string,
+  clipId: string,
+): Promise<PostTextPackage | null> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select(exportColumns)
+      .from(derivedAsset)
+      .innerJoin(proof, eq(derivedAsset.proofId, proof.id))
+      .innerJoin(source, eq(proof.sourceId, source.id))
+      .where(
+        and(
+          eq(derivedAsset.id, clipId),
+          eq(proof.workspaceId, workspaceId),
+          effectiveConsentGranted(derivedAsset.proofId),
+        ),
+      )
+      .limit(1);
+
+    const row = rows[0];
+    return row ? toPostTextPackage(row) : null;
+  });
+}
+
+// Many clips' post-text packages by id — the BULK export read. Same join + the SAME
+// shared gate; returns ONLY the granted, in-workspace clips among `clipIds`, newest
+// first. The difference (requested − returned) is the honest SKIPPED set the
+// exportClips action reports (withdrawn / missing / cross-workspace, indistinguishable
+// by design). This is the consent RE-READ at action time — the B1 generateBatch race
+// applied to a read: a clip granted at select but withdrawn before export is absent.
+export async function getClipExports(
+  workspaceId: string,
+  clipIds: string[],
+): Promise<PostTextPackage[]> {
+  if (clipIds.length === 0) return [];
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select(exportColumns)
+      .from(derivedAsset)
+      .innerJoin(proof, eq(derivedAsset.proofId, proof.id))
+      .innerJoin(source, eq(proof.sourceId, source.id))
+      .where(
+        and(
+          inArray(derivedAsset.id, clipIds),
+          eq(proof.workspaceId, workspaceId),
+          effectiveConsentGranted(derivedAsset.proofId),
+        ),
+      )
+      .orderBy(desc(derivedAsset.createdAt));
+
+    return rows.map(toPostTextPackage);
+  });
 }
