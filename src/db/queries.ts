@@ -3,6 +3,7 @@ import { getDb } from "./client";
 import { withDbRetry } from "./with-retry";
 import {
   brandAsset,
+  brandKit,
   consent,
   derivedAsset,
   proof,
@@ -31,6 +32,7 @@ import {
   type ConsentVersionEntry,
   type ProofConsentClip,
 } from "@/lib/consent";
+import type { BrandKitFonts, BrandKitView } from "@/lib/brand-kit";
 
 export type Workspace = typeof workspace.$inferSelect;
 
@@ -1045,4 +1047,103 @@ export async function recordConsentWithdrawal(
   });
 
   return { status: "recorded", version: nextVersion };
+}
+
+// ============================================================================
+// Brand kit reads + write (T5-BrandKit). The workspace's OWNED visual identity —
+// no consent involvement (like brand_asset). ADDITIVE: every existing read/table is
+// byte-unchanged; these are NEW siblings over the new brand_kit table. Auto-contrast
+// is DERIVED in the UI (contrastOn) — never stored. v1 manages the single row; the
+// table is naturally multi-row (no unique on workspaceId) so multi-kit is later
+// additive UI.
+// ============================================================================
+
+function toBrandKitView(row: {
+  id: string;
+  name: string | null;
+  logoAssetUrl: string | null;
+  brandColor: string;
+  fonts: unknown;
+}): BrandKitView {
+  return {
+    id: row.id,
+    name: row.name,
+    logoAssetUrl: row.logoAssetUrl,
+    brandColor: row.brandColor,
+    fonts: row.fonts as BrandKitFonts,
+  };
+}
+
+// The workspace's single brand kit (limit 1); null when none exists yet.
+export async function getBrandKit(
+  workspaceId: string,
+): Promise<BrandKitView | null> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        id: brandKit.id,
+        name: brandKit.name,
+        logoAssetUrl: brandKit.logoAssetUrl,
+        brandColor: brandKit.brandColor,
+        fonts: brandKit.fonts,
+      })
+      .from(brandKit)
+      .where(eq(brandKit.workspaceId, workspaceId))
+      .orderBy(asc(brandKit.createdAt))
+      .limit(1);
+
+    const row = rows[0];
+    return row ? toBrandKitView(row) : null;
+  });
+}
+
+// Upsert the workspace's single kit — UPDATE the existing row (+ updatedAt) if one
+// exists, else INSERT. Read-then-write (no onConflict/unique key — kept open for
+// multi-kit). Single-attempt write (no blind retry). NO consent reference.
+export async function upsertBrandKit(
+  workspaceId: string,
+  input: {
+    name: string | null;
+    logoAssetUrl: string | null;
+    brandColor: string;
+    fonts: BrandKitFonts;
+  },
+): Promise<BrandKitView> {
+  const db = getDb();
+  const existing = await db
+    .select({ id: brandKit.id })
+    .from(brandKit)
+    .where(eq(brandKit.workspaceId, workspaceId))
+    .orderBy(asc(brandKit.createdAt))
+    .limit(1);
+
+  const values = {
+    name: input.name,
+    logoAssetUrl: input.logoAssetUrl,
+    brandColor: input.brandColor,
+    fonts: input.fonts,
+  };
+
+  const returning = {
+    id: brandKit.id,
+    name: brandKit.name,
+    logoAssetUrl: brandKit.logoAssetUrl,
+    brandColor: brandKit.brandColor,
+    fonts: brandKit.fonts,
+  };
+
+  if (existing[0]) {
+    const rows = await db
+      .update(brandKit)
+      .set({ ...values, updatedAt: new Date() })
+      .where(eq(brandKit.id, existing[0].id))
+      .returning(returning);
+    return toBrandKitView(rows[0]);
+  }
+
+  const rows = await db
+    .insert(brandKit)
+    .values({ workspaceId, ...values })
+    .returning(returning);
+  return toBrandKitView(rows[0]);
 }

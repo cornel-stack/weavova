@@ -228,3 +228,34 @@ export const proofBrandAsset = pgTable(
     index("proof_brand_asset_brand_asset_idx").on(t.brandAssetId),
   ],
 );
+
+// The brand kit (T5-BrandKit) — a workspace's OWNED visual identity (logo, one brand
+// colour, a curated font pair). Distinct from brand_asset (reusable footage); this is
+// visual identity. OWNED brand data — NO consent reference, no proof linkage (like
+// brand_asset). `logoAssetUrl` is the real R2 object URL (reusing B2's R2 path) and is
+// NULLABLE — null = the honest "no logo yet" state (never a broken <img>); the seed
+// leaves it null. `brandColor` is one hex (auto-contrast is DERIVED at read time, not
+// stored). `fonts` is the curated pick { display, body }.
+//
+// NO unique constraint on workspaceId — the table is naturally MULTI-ROW so promoting
+// to multiple kits later is additive UI, no migration; v1 manages the single row.
+export const brandKit = pgTable(
+  "brand_kit",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    name: text("name"), // optional kit name
+    logoAssetUrl: text("logo_asset_url"), // R2 URL; null = no logo (honest empty state)
+    brandColor: text("brand_color").notNull(), // one hex; contrast derived, not stored
+    fonts: jsonb("fonts").notNull(), // the curated { display, body } pick
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("brand_kit_ws_idx").on(t.workspaceId)],
+);

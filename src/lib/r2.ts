@@ -71,6 +71,13 @@ export function brandAssetKey(workspaceId: string, suffix: string): string {
   return `brand-assets/${workspaceId}/${suffix}`;
 }
 
+// A workspace-scoped object key for a brand-kit LOGO upload (T5-BrandKit). Reuses the
+// same R2 bucket + the presignPut/assetUrlForKey path; only the key prefix differs
+// (brand-kit/). The random suffix is caller-supplied (server-generated).
+export function brandKitLogoKey(workspaceId: string, suffix: string): string {
+  return `brand-kit/${workspaceId}/${suffix}`;
+}
+
 // Sign a short-lived PUT URL for `key` bound to `contentType` (aws4fetch SigV4).
 // The browser will PUT the file to this URL directly. Returns the URL only; the
 // row is recorded separately AFTER the browser confirms the PUT succeeded.

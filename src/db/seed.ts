@@ -1,6 +1,7 @@
 import { getDb } from "./client.ts";
 import {
   brandAsset,
+  brandKit,
   consent,
   derivedAsset,
   proof,
@@ -166,6 +167,7 @@ async function seed() {
   // (before workspace), then the rest.
   await db.delete(derivedAsset);
   await db.delete(proofBrandAsset);
+  await db.delete(brandKit);
   await db.delete(consent);
   await db.delete(proof);
   await db.delete(brandAsset);
@@ -282,8 +284,19 @@ async function seed() {
     attachmentCount += 1;
   }
 
+  // The workspace's brand kit (T5-BrandKit) — seed real colours + fonts, and leave
+  // logoAssetUrl NULL (the honest "no logo yet" state). We do NOT seed a placeholder
+  // logo URL that would render broken; the logo is for live upload (FR-005).
+  await db.insert(brandKit).values({
+    workspaceId: ws.id,
+    name: "Lumen Candle Co.",
+    logoAssetUrl: null,
+    brandColor: "#9A6A3C",
+    fonts: { display: "fraunces", body: "hanken" },
+  });
+
   console.log(
-    `seeded: workspace=1 sources=${SOURCES.length} proofs=${proofCount} consent=${consentCount} clips=${clipCount} brandAssets=${brandAssetCount} attachments=${attachmentCount}`,
+    `seeded: workspace=1 sources=${SOURCES.length} proofs=${proofCount} consent=${consentCount} clips=${clipCount} brandAssets=${brandAssetCount} attachments=${attachmentCount} brandKit=1`,
   );
 }
 
