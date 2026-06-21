@@ -25,6 +25,12 @@ import type {
 import type { ConsentState, ProofDetailView, ProofView } from "@/lib/proof";
 import type { ShowcaseItem } from "@/lib/showcase";
 import { sampleVideoRef, type PostTextPackage } from "@/lib/export";
+import {
+  CONSENT_PURPOSE,
+  type ConsentLedgerEntry,
+  type ConsentVersionEntry,
+  type ProofConsentClip,
+} from "@/lib/consent";
 
 export type Workspace = typeof workspace.$inferSelect;
 
@@ -900,4 +906,143 @@ export async function getClipExports(
 
     return rows.map(toPostTextPackage);
   });
+}
+
+// ============================================================================
+// Consent surface reads + the record-withdrawal write (T5-Consent). The consent
+// model has gated every surface all session; this gives it a surface of its own.
+// ADDITIVE: the shared helpers (effectiveConsentState / latestConsentState /
+// latestConsentVersion / latestConsentEffectiveAt / getGrantedConsentId) and EVERY
+// consuming read are byte-unchanged; these are NEW siblings. The write appends a new
+// EXISTING-SHAPE consent row (a new revoked version) — no schema change, no new gate.
+// ============================================================================
+
+// The consent ledger — one row per proof with its CURRENT effective state, REUSING
+// the existing latestConsentState/Version/EffectiveAt helpers (the getProof helpers —
+// byte-stable). Lists ALL proofs/states (the status chips filter client-side).
+export async function getConsentLedger(
+  workspaceId: string,
+): Promise<ConsentLedgerEntry[]> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        proofId: proof.id,
+        customerName: proof.customerName,
+        state: latestConsentState,
+        currentVersion: latestConsentVersion,
+        effectiveAt: latestConsentEffectiveAt,
+      })
+      .from(proof)
+      .where(eq(proof.workspaceId, workspaceId))
+      .orderBy(desc(proof.capturedAt));
+
+    return rows.map((row) => ({
+      proofId: row.proofId,
+      customerName: row.customerName,
+      purpose: CONSENT_PURPOSE,
+      // no consent row → not granted (gate fails closed), like toView
+      state: row.state ?? "awaiting",
+      currentVersion:
+        row.currentVersion == null ? null : Number(row.currentVersion),
+      effectiveAt:
+        row.effectiveAt == null
+          ? null
+          : new Date(row.effectiveAt).toISOString(),
+    }));
+  });
+}
+
+// Per-proof FULL retained version timeline (Q3:A) — ALL consent rows for the proof,
+// version asc. Superseded/withdrawn versions are SHOWN, never erased (P-VII "pull,
+// don't destroy"). Workspace-scoped via the proof join.
+export async function getConsentHistory(
+  workspaceId: string,
+  proofId: string,
+): Promise<ConsentVersionEntry[]> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        version: consent.version,
+        state: consent.state,
+        effectiveAt: sql<Date | string | null>`coalesce(${consent.revokedAt}, ${consent.grantedAt}, ${consent.createdAt})`,
+      })
+      .from(consent)
+      .innerJoin(proof, eq(consent.proofId, proof.id))
+      .where(and(eq(proof.workspaceId, workspaceId), eq(consent.proofId, proofId)))
+      .orderBy(asc(consent.version));
+
+    return rows.map((row) => ({
+      version: Number(row.version),
+      state: row.state,
+      effectiveAt:
+        row.effectiveAt == null
+          ? null
+          : new Date(row.effectiveAt).toISOString(),
+    }));
+  });
+}
+
+// THE SHARED READ — the proof's clips with their made-under consent version. Powers
+// BOTH the cascade-preview N (= result.length) and the made-under provenance list
+// (Q1 ∩ Q2). Proof-level cascade: withdrawing the proof's consent withholds ALL its
+// clips, so this list IS the set the withdrawal will withhold. Workspace-scoped.
+export async function getProofConsentClips(
+  workspaceId: string,
+  proofId: string,
+): Promise<ProofConsentClip[]> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        clipId: derivedAsset.id,
+        format: derivedAsset.format,
+        madeUnderVersion: consent.version,
+        createdAt: derivedAsset.createdAt,
+      })
+      .from(derivedAsset)
+      .innerJoin(consent, eq(derivedAsset.consentId, consent.id))
+      .where(
+        and(
+          eq(derivedAsset.workspaceId, workspaceId),
+          eq(derivedAsset.proofId, proofId),
+        ),
+      )
+      .orderBy(desc(derivedAsset.createdAt));
+
+    return rows.map((row) => ({
+      clipId: row.clipId,
+      format: row.format,
+      madeUnderVersion: Number(row.madeUnderVersion),
+      createdAt: row.createdAt.toISOString(),
+    }));
+  });
+}
+
+// Record a customer's withdrawal — append a NEW withdrawn version through the EXISTING
+// model (never a delete/update; prior versions RETAINED). Re-checks current grant
+// first (reuse getGrantedConsentId — the shared gate): a non-granted proof is an
+// honest no-op (no second version). version = max(version)+1. SINGLE attempt (D4 —
+// the unique (proofId, version) index guards a double write). This RECORDS the
+// customer's withdrawal; there is NO re-grant write.
+export async function recordConsentWithdrawal(
+  workspaceId: string,
+  proofId: string,
+): Promise<{ status: "recorded" | "not_granted"; version?: number }> {
+  // Re-check CURRENT effective grant at write time (the established gate).
+  const granted = await getGrantedConsentId(workspaceId, proofId);
+  if (!granted) return { status: "not_granted" };
+
+  const maxRows = await getDb()
+    .select({ max: sql<number | string>`max(${consent.version})` })
+    .from(consent)
+    .where(eq(consent.proofId, proofId));
+  const nextVersion = Number(maxRows[0]?.max ?? 0) + 1;
+
+  await getDb().insert(consent).values({
+    proofId,
+    state: "revoked",
+    revokedAt: new Date(),
+    version: nextVersion,
+  });
+
+  return { status: "recorded", version: nextVersion };
 }
