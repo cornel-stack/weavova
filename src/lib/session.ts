@@ -1,12 +1,20 @@
-import { getDefaultWorkspace, type Workspace } from "@/db/queries";
+import { redirect } from "next/navigation";
+import { asc, eq } from "drizzle-orm";
+import { auth } from "@/auth";
+import { getDb } from "@/db/client";
+import { withDbRetry } from "@/db/with-retry";
+import { membership, users, workspace } from "@/db/schema";
+import type { Workspace } from "@/db/queries";
 
 // ============================================================================
-// The auth / workspace seam. This module is the ONLY place T6 swaps for real
-// Auth.js + real workspace membership. No component hardcodes a workspace id or
-// imports the db directly — everything scopes through getCurrentWorkspace().
+// The auth / workspace seam. T6 swapped this module from a hardcoded stub to real
+// Auth.js + workspace membership. Its SIGNATURES AND RETURN SHAPES ARE UNCHANGED,
+// so every consumer (the FR-021 list) stays byte-stable — the swap is invisible to
+// callers (Principle V). No component imports the db or hardcodes a workspace id;
+// everything still scopes through getCurrentWorkspace().
 // ============================================================================
 
-export type StubSession = {
+export type Session = {
   user: {
     name: string;
     initials: string;
@@ -14,25 +22,70 @@ export type StubSession = {
   };
 };
 
-// Hardcoded stub signed-in user. There is no users table yet (that is T6).
-export async function getSession(): Promise<StubSession> {
+function initialsFrom(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const letters = parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "");
+  return letters.join("") || name.slice(0, 2).toUpperCase();
+}
+
+// The signed-in user, mapped to the SAME shape the stub returned ({ name, initials,
+// email }) so the chrome (layout → UserMenu, dashboard greeting) is byte-stable.
+// Within /app the middleware guarantees a session; the redirect is a defensive
+// fallback (never a half-rendered chrome).
+export async function getSession(): Promise<Session> {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const name = session.user.name ?? session.user.email ?? "Account";
   return {
     user: {
-      name: "Maya K.",
-      initials: "MK",
-      email: "maya@lumencandle.co",
+      name,
+      initials: initialsFrom(name),
+      email: session.user.email ?? undefined,
     },
   };
 }
 
-// The current workspace = the seeded demo workspace (T0.3). At T6 this resolves
-// from the authenticated user's membership instead.
+// The workspace the signed-in user belongs to (their single workspace in v1),
+// resolved via membership by verified email. Returns the SAME `Workspace` type as
+// before, so every caller is byte-stable. No session → redirect to sign-in (the
+// new auth path). Session but no workspace → throw (a genuine data anomaly, caught
+// by the existing root error boundary — the same behaviour the stub had when no
+// workspace existed; provisioning in src/auth.ts makes this effectively unreachable).
 export async function getCurrentWorkspace(): Promise<Workspace> {
-  const ws = await getDefaultWorkspace();
+  const session = await auth();
+  if (!session?.user?.email) redirect("/login");
+  const email = session.user.email;
+
+  const ws = await withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        id: workspace.id,
+        name: workspace.name,
+        slug: workspace.slug,
+        createdAt: workspace.createdAt,
+      })
+      .from(membership)
+      .innerJoin(users, eq(membership.userId, users.id))
+      .innerJoin(workspace, eq(membership.workspaceId, workspace.id))
+      .where(eq(users.email, email))
+      .orderBy(asc(membership.createdAt))
+      .limit(1);
+    return rows[0] ?? null;
+  });
+
   if (!ws) {
     throw new Error(
-      "No workspace found. Run the T0.3 seed (npm run db:seed) to create the demo workspace.",
+      "No workspace found for the signed-in user. New users are provisioned a workspace on sign-in (src/auth.ts events.createUser); the demo owner is seeded (npm run db:seed).",
     );
   }
   return ws;
+}
+
+// Layer-2 entry helper (FR-017): the single documented way a loader / Server Action
+// resolves the workspace so it cannot read the db without a workspace scope. Today it
+// delegates to getCurrentWorkspace(); kept distinct as the named multi-tenant-safety
+// invariant entry. (Query functions already take an explicit workspaceId and filter
+// on it — middleware protects ROUTES, this protects READS; both are required.)
+export async function requireWorkspace(): Promise<Workspace> {
+  return getCurrentWorkspace();
 }

@@ -1,7 +1,7 @@
+import { notFound } from "next/navigation";
 import { ProofCard } from "@/components/proof-card";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { getProofs } from "@/db/queries";
-import { getCurrentWorkspace } from "@/lib/session";
+import { getDefaultWorkspace, getProofs } from "@/db/queries";
 
 // Dynamic + the lazy db client → CI/static build is green without DATABASE_URL;
 // real data is read at request time.
@@ -12,9 +12,13 @@ export const metadata = {
 };
 
 export default async function StyleguideDataPage() {
-  // getProofs is workspace-scoped (T2.2); resolve the current workspace via the
-  // seam, as the app does.
-  const workspace = await getCurrentWorkspace();
+  // T6: this is a DEV-ONLY harness, not a product surface, and it sits OUTSIDE /app/*
+  // (the middleware gate does not cover it). It is excluded from production, and reads
+  // the default workspace DIRECTLY (its pre-T6 behaviour) instead of the session seam,
+  // so it needs no auth/session. (Deliberately removed from the session seam — plan §6.)
+  if (process.env.NODE_ENV === "production") notFound();
+  const workspace = await getDefaultWorkspace();
+  if (!workspace) notFound();
   const proofs = await getProofs(workspace.id);
 
   return (
