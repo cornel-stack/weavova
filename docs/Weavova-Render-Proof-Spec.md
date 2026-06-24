@@ -1,6 +1,6 @@
 # Weavova — Render & Proof Spec
 
-**Version:** 0.2 (open decisions resolved)
+**Version:** 0.3 — adds the RenderPlan layer + two agent roles (§4.5), the analyze→plan→validate pipeline (§5), the law guard, the plan-not-code / no-LLM-in-render invariants (§1), the growth loop (§8), and the ingestion primitive (§10).
 **Date:** June 2026
 **Status:** Pre-build. Feeds the T7 (capture) and T8 (render engine) tiers. Derived from the Remotion spike + the render-flow analysis. The six v0.1 open decisions are now resolved — see §11.
 **Relation to other docs:** Subordinate to `CLAUDE.md` and the constitution. This is the engineering spec for *how raw proof becomes post-ready content*. It is the source that the T7/T8 `/speckit.specify` documents will be written from.
@@ -26,6 +26,12 @@ This is the operational expression of three constitution principles:
 - **The One Law** (II) — the customer is the headline; our framing is clearly *ours*, never theirs.
 - **Consent Is Sacred** (VII) — consent is scoped, revocable, and display-aware; revocation cascades.
 - **No Editor** (VIII) — no video editor for the *user*. The system performs automated assembly; the human's only job is review and approval, never timeline editing.
+
+It also has three operational invariants that govern the render-era architecture:
+
+- **Testimony verbatim.** The agent layer decides *presentation* only (pacing, emphasis, framing). The customer's words are never authored or altered by a model — only fixed for transcription error, by a human.
+- **Plan-not-code.** At run time the agent emits a *structured, validated plan*, never composition source. Composition code is authored only at build time, human-reviewed, and committed.
+- **No LLM in the render path.** After a plan is validated and assembled, render is deterministic and reproducible. No model improvises mid-render.
 
 Every requirement below traces back to this law.
 
@@ -155,24 +161,60 @@ Note what is *resolved before* render: `displayName` already reflects consent, `
 
 ---
 
+## 4.5 The RenderPlan + the two agent roles
+
+A clip is produced from a **`RenderPlan`** — a bounded, validated description the agent proposes and the merchant edits. It is data, not code, and never contains the customer's words (it points at which of *their* words to emphasize).
+
+```ts
+interface RenderPlan {
+  templateChoice: ProofType;          // video | audio | photo | text
+  format: Format;                     // 9x16 | 1x1 | 4x5 | 16x9
+  highlight: { startMs: number; endMs: number };   // proposed in/out, merchant-editable
+  hook: Hook;                         // BRAND-authored, never the customer's words
+  cutaways?: string[];                // owned B-roll ids, "pick up to N"
+  reframe: "subject_track" | "letterbox";
+  musicMood?: string;                 // resolves to a cleared, licensed track
+  emphasis?: { wordIndex: number }[]; // emphasis over the REAL transcript, never new words
+  source: "agent" | "merchant";       // provenance of each plan; never auto-final
+}
+```
+
+**`RenderPlan` → `RenderInput`:** the validated plan, combined with the pipeline's resolved pieces (corrected transcript, `ConsentDisplay`, verification basis), assembles into the `RenderInput` (§4) the deterministic render consumes.
+
+**Two agent roles, neither in the render path:**
+
+- *Build time:* the Remotion Agent Skill — agent-agnostic (Claude Code / Codex / Cursor / OpenCode) — authors the template family as reviewed, committed code (the render's only executable surface).
+- *Run time:* a reasoning LLM (e.g. GLM, swappable) proposes the `RenderPlan`. On failure/slowness it falls back to the cheap heuristic (§11.1). Hosted-vs-self-hosted is an open decision (self-host favors consent-data governance).
+
+---
+
 ## 5. The pre-render pipeline
 
 The render is the last stage. Everything that makes a clip *correct and consented* happens before it.
 
 ```
-ingest → normalize → transcribe → correct → select highlight → reframe → assemble → APPROVE → render → distribute
+ingest → normalize → transcribe → correct → analyze → RenderPlan → validate
+       → reframe → assemble → APPROVE → render → distribute
 ```
+
+Two new stages sit between *correct* and *reframe*:
+
+- **Analyze → RenderPlan** — the LLM proposes the bounded plan from the corrected proof; heuristic fallback.
+- **Validate (the law guard)** — schema-validate the plan and **reject** anything that edits the quote, drops the verified basis, exceeds bounds, or would render the hook as the customer's words — before assembly. This is the wall that makes a per-clip agent safe.
+
+Highlight, hook, cutaway, format, and music selection are now *proposed by the plan and edited by the merchant*, not separate manual steps.
 
 1. **Ingest** — accept the raw proof (any format/orientation/quality) + the consent record. (T7)
 2. **Normalize** — transcode the source to a sane resolution/codec/length before anything decodes it. *(Spike learning: the 4K/60fps original crashed the machine; a 720×1280 normalize fixed it. The real worker must do this for every upload.)*
 3. **Transcribe** — for video/audio, word-level timestamps via AssemblyAI/Deepgram; detect language/accent.
 4. **Correct** — mandatory human correction of the transcript before it can be used as captions (a wrong caption is a fabricated quote).
-5. **Select highlight** — pick the punchy segment (merchant picks; we may suggest). The hook is written to tease *this* segment.
-6. **Reframe** — subject-aware framing or branded letterbox (never blind-crop a face).
-7. **Assemble** — build the `RenderInput` from the corrected, consented, resolved pieces.
-8. **Approve** — human approval gate. Nothing auto-publishes.
-9. **Render** — Remotion, deterministic, on the cloud worker.
-10. **Distribute** — publish / export / embed, within consent scope.
+5. **Analyze → RenderPlan** — the LLM proposes the bounded `RenderPlan` (highlight in/out, hook fill, format, cutaways, music mood, emphasis) from the corrected proof; the cheap transcript heuristic is the fallback. The merchant edits the plan; it is never auto-final.
+6. **Validate (the law guard)** — schema-validate the plan and reject anything that edits the quote, drops the verified basis, exceeds bounds, or would render the hook as the customer's words — before assembly.
+7. **Reframe** — subject-aware framing or branded letterbox (never blind-crop a face).
+8. **Assemble** — build the `RenderInput` from the validated plan + the corrected, consented, resolved pieces.
+9. **Approve** — human approval gate. Nothing auto-publishes.
+10. **Render** — Remotion, deterministic, on the cloud worker.
+11. **Distribute** — publish / export / embed, within consent scope.
 
 ---
 
@@ -237,6 +279,7 @@ The hook is the brand's marketing words, not the customer's. It is **visually an
 - **The `RenderInput` contract is real code** — it drives the studio UI fields and the schema's `derived_asset` shape.
 - **The Pressroom brand system survives vertical video** — Fraunces/persimmon/paper/stamp read as premium and non-synthetic (validated baseline for the video template).
 - **Craft fixes from the judged clip:** adaptive scrims (legibility), and easing text density so the face breathes.
+- **The growth loop.** When a review fits no template, the agent does **not** improvise at run time — it *proposes a new template variant* that re-enters the build-time authoring track, is human-reviewed, and joins the library. Run time always renders a reviewed template.
 
 ---
 
@@ -269,6 +312,8 @@ Every inconsistency we identified, and where this spec resolves it. (★ = raise
 - **T7 (Capture)** owns ingest, consent capture (scope + display), normalize, and verification basis. First real customer proof enters here.
 - **T8 (Render engine)** owns transcribe → correct → select → reframe → assemble → render, the template family, and the approval gate. The spike's `ProofClip` becomes the **video** template; the audio/photo/text templates are built alongside.
 - **Sequencing note:** the correction gate, approval gate, and consent-scope model are not polish — they are prerequisites for *any* clip to legitimately carry the verified stamp. They ship with T7/T8, not later.
+- **Ingestion is one internal primitive, many adapters.** Every source resolves to: *event (sale / booking / delivery) → create capture request → `/c/[token]`*. T7 core ships the primitive + **one generic inbound webhook** + **static link / QR** + the manual Resend request — enough to light the whole funnel (Zapier/Make/n8n bridge any store into the webhook). Native connectors (Shopify / Stripe / Square / Calendly / AfterShip / Shippo / email-parse) are a **phased Sources track** of adapters on the primitive, each depending on T6 auth, none blocking the capture core. **Source quality feeds the verified bar** — a native order gives a strong automatic transaction link; the generic/manual paths give a weaker basis.
+- **Scoped consent** (`ConsentDisplay`: `useScope[]` + display prefs) enters at T7. The P-VII mechanism (new revoked version, read-time effective consent, retained for audit) is unchanged — only the payload is richer.
 
 ---
 
@@ -282,3 +327,7 @@ Confirmed by Cornel. These close the v0.1 open questions; cross-refs point to wh
 4. **Text-proof format → motion clip by default, carousel alternate.** Default is a clip featuring the **real source screenshot** as proof; carousel is available; the choice is a **workspace default, overridable per proof** — not asked every time. (§2)
 5. **Revocation → two-tier.** Hosted assets pulled instantly and automatically; already-posted external clips auto-flagged to the merchant as a takedown task with a deadline, obligation in the terms; expectation set in the consent UX. (§7.2)
 6. **Transcription provider → deferred to T8; seam locked now.** Both AssemblyAI and Deepgram expose word-level timestamps; the pick (accuracy-for-our-languages — test Swahili / African-accented English — and cost/latency) is **benchmarked on real audio at T8**. The `transcript: Caption[]` interface is locked now so the provider stays swappable and the decision carries no urgency. (§6.1, §10)
+7. **RenderPlan is the runtime contract** — plan-not-code; the agent decides presentation only. (§1, §4.5)
+8. **Template authoring is agent-agnostic** — the Remotion Agent Skill works with Claude Code, Codex, Cursor, OpenCode; pick on output quality. (§4.5)
+9. **Runtime LLM assist is swappable, with a heuristic fallback.** Hosted-vs-self-host is OPEN (self-host favors keeping consented testimony in controlled infra). (§4.5)
+10. **Ingestion = primitive + adapters.** Generic webhook + link/QR in T7 core; native connectors phased. (§10)

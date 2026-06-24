@@ -40,7 +40,7 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-Confirm this plan complies with `.specify/memory/constitution.md` (v1.0.1). Each gate below maps to
+Confirm this plan complies with `.specify/memory/constitution.md` (v1.4.0). Each gate below maps to
 a binding principle; mark PASS / FAIL / N/A and justify any FAIL in Complexity Tracking.
 
 - [ ] **Customer is the headline (P-II)**: every proof surface in this plan makes the real
@@ -57,10 +57,18 @@ a binding principle; mark PASS / FAIL / N/A and justify any FAIL in Complexity T
 - [ ] **Consent enforcement (P-VII)**: consent is visible, versioned, revocable; revocation
       cascades to derived assets; no clip is generated from proof lacking consent.
 - [ ] **No editor (P-VIII)**: the clip studio is a format picker — no timeline, track, or scrubber.
-- [ ] **SDD scope (P-IX, P-XI)**: one vertical slice only; no speculative/"while I'm here" work;
+- [ ] **SDD scope (P-IX)**: one vertical slice only; no speculative/"while I'm here" work;
       stays within the current tier (T0–T10) sequence.
 - [ ] **Ambiguity handling (P-XII)**: open questions are raised against a named `/design-reference`
       screen rather than guessed.
+- [ ] **Port-completeness (P-XIII)**: every rendered control works, or is an honest "coming" state /
+      hidden. No dead controls.
+- [ ] **Owned data only (P-XIV)**: only Weavova-produced data is shown. No fabricated capability or
+      metric (no invented counts/views; warmth = content-readiness, not a sentiment score).
+- [ ] **Plan-not-code (P-XV)**: runtime proposes a validated plan; no agent-authored composition
+      code at runtime. Mark "N/A — non-render slice" where it doesn't apply.
+- [ ] **No-LLM-in-render (P-XVI)**: render is deterministic after validation; no model in the render
+      path. Mark "N/A — non-render slice" where it doesn't apply.
 
 **Definition of done (P-Governance)** — this slice must, before it is considered complete: render
 on real data (fixtures in Phase 1); handle empty / loading / error states; be responsive to the

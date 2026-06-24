@@ -150,7 +150,7 @@ Examples of foundational tasks (adjust based on your project):
 ## Phase N: Polish, Cross-Cutting Concerns & Definition of Done
 
 **Purpose**: Improvements that affect multiple user stories, plus the constitution-mandated
-per-slice gates (see `.specify/memory/constitution.md` v1.0.1, Governance → Definition of Done).
+per-slice gates (see `.specify/memory/constitution.md` v1.4.0, Governance → Definition of Done).
 
 **Constitution-driven tasks** (include the ones that apply to this slice):
 
@@ -165,7 +165,15 @@ per-slice gates (see `.specify/memory/constitution.md` v1.0.1, Governance → De
 - [ ] TXXX Keyboard accessibility pass (focus order, shortcuts, ⌘K where applicable)
 - [ ] TXXX Consent enforcement verified: revocation cascades to derived assets; no clip generated
       from proof lacking consent (P-VII) — *if proof/assets are in scope*
-- [ ] TXXX Microcopy review: no "amazing"/"awesome", no emoji in product copy (P-XI)
+- [ ] TXXX Microcopy review: no "amazing"/"awesome", no emoji in product copy (P-XVII)
+- [ ] TXXX [P] Port-completeness check: every rendered control works, or is an honest "coming" state
+      / hidden — no dead controls (P-XIII)
+- [ ] TXXX [P] Owned-data audit: only Weavova-produced data is shown; no fabricated capability or
+      metric (no invented counts/views; warmth = content-readiness, not a sentiment score) (P-XIV)
+- [ ] TXXX Plan-not-code check: runtime proposes a validated plan; no agent-authored composition
+      code at runtime (P-XV) — *N/A — non-render slice where it doesn't apply*
+- [ ] TXXX No-LLM-in-render check: render is deterministic after validation; no model in the render
+      path (P-XVI) — *N/A — non-render slice where it doesn't apply*
 - [ ] TXXX [P] Documentation updates (not in `/docs` or `/design-reference`, which are read-only)
 - [ ] TXXX Code cleanup and refactoring (TS strict: no `any`, no unjustified `@ts-ignore`)
 - [ ] TXXX `npm run lint` and `npm run build` green

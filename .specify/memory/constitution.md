@@ -1,9 +1,31 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.1.1 → 1.1.2
-Rationale: PATCH. Adds one type-scale token, `--text-mono-sm` (11 / 16, JetBrains Mono), for dense
-metadata / IDs (11 px mono appears on ~42 screens, nearly as many as 12 px `--text-mono`). No
+Version change: 1.3.0 → 1.4.0
+Rationale: MINOR. Re-homes the two rules orphaned when XI was repurposed into Reference Integrity at
+1.3.0 (no removals): (a) the **no-speculative / "while I'm here" / unrequested-features** rule folds
+into **IX Spec-Driven Development Workflow** (the scope-discipline principle); (b) the **microcopy
+ban** (no "amazing"/"awesome"/hype adjectives, no emoji) becomes a new short principle **XVII
+Microcopy & Voice** (no existing style/microcopy principle existed). Repoints the now-dangling
+template `(P-XI)` citations for Scope → `(P-IX)` and Microcopy → `(P-XVII)`, and refreshes the three
+templates' stale `(v1.0.1)` constitution refs to `(v1.4.0)`.
+
+Prior — 1.3.0 (MINOR): materially narrowed the scope of an existing principle. XI was refined from a
+broad "Never-Do Rules" list into **Reference Integrity**: it previously forbade ALL `/docs` edits,
+which conflicted with deliberate, instructed spec revisions like the v0.3 render-spec fold. The
+prohibition now covers (a) the immutable `/design-reference` and (b) incidental `/docs` edits during
+a feature-implementation slice, while permitting standalone, explicitly-instructed spec revisions
+that Cornel reviews and commits. Also propagated the 1.2.0 principles (XIII–XVI) into the three Spec
+Kit templates' Constitution Check sections (the deferred 1.2.0 follow-up).
+
+Prior — 1.2.0 (MINOR): added four principles, all derived from the render-era decisions and the two
+long-pending cross-cutting rules: XIII Port-Completeness (elevates A-11), XIV Owned Data Only
+(elevates FR-019), XV Plan-Not-Code, XVI No-LLM-in-Render. Testimony-verbatim is cross-referenced
+(it already lives as the governing law in the Render & Proof Spec §1, now v0.3). No colour or token
+change. CLAUDE.md §8/§9 and the Render & Proof Spec (→ v0.3) synced in the same session.
+
+Prior — 1.1.2 (PATCH): added one type-scale token, `--text-mono-sm` (11 / 16, JetBrains Mono), for
+dense metadata / IDs (11 px mono appears on ~42 screens, nearly as many as 12 px `--text-mono`). No
 colour, principle, or governance change. CLAUDE.md §5 synced.
 
 Prior — 1.1.1 (PATCH): completed existing Principle IV token guidance with exact values reconciled
@@ -46,6 +68,16 @@ Principles (unchanged in 1.0.1):
   X.    Coding Conventions
   XI.   Never-Do Rules
   XII.  Handling Ambiguity — Stop and Ask
+Principles added in 1.2.0:
+  XIII. Port-Completeness (A-11)
+  XIV.  Owned Data Only (FR-019)
+  XV.   Plan-Not-Code
+  XVI.  No-LLM-in-Render
+Refined in 1.3.0:
+  XI.   Never-Do Rules → Reference Integrity (scope narrowed)
+Re-homed / added in 1.4.0:
+  IX.   Spec-Driven Development Workflow — now also owns the no-speculative-work rule
+  XVII. Microcopy & Voice (new; re-homes the microcopy ban from the old XI)
 Sections: Technology Constraints; Design Tokens (token tables); Governance
 
 Templates synced to this constitution (resolved in 1.0.1):
@@ -53,7 +85,16 @@ Templates synced to this constitution (resolved in 1.0.1):
   ✅ .specify/templates/spec-template.md   — added Constitution Alignment mandatory section
   ✅ .specify/templates/tasks-template.md  — added principle-driven task types + per-slice DoD
 
-Follow-up TODOs: none. RATIFICATION_DATE 2026-06-12 (first adoption); LAST_AMENDED 2026-06-12.
+Templates synced (1.3.0):
+  ✅ .specify/templates/spec-template.md   — Constitution Alignment gains XIII–XVI items
+  ✅ .specify/templates/plan-template.md   — Constitution Check gains XIII–XVI gates
+  ✅ .specify/templates/tasks-template.md  — Polish/DoD phase gains XIII–XVI tasks
+Templates touched (1.4.0):
+  ✅ .specify/templates/spec-template.md   — Scope (P-XI→P-IX), Microcopy (P-XI→P-XVII), ref v1.4.0
+  ✅ .specify/templates/plan-template.md   — SDD scope (P-XI→P-IX), ref v1.4.0
+  ✅ .specify/templates/tasks-template.md  — Microcopy (P-XI→P-XVII), ref v1.4.0
+Follow-up TODOs (1.4.0): none. The 1.2.0 template-propagation follow-up was resolved at 1.3.0.
+RATIFICATION_DATE 2026-06-12 (first adoption); LAST_AMENDED 2026-06-24.
 -->
 
 # Weavova Constitution
@@ -303,8 +344,11 @@ Every vertical slice follows the Spec Kit sequence, in order:
   vertical slice at a time**; do not advance to the next slice or tier until the human explicitly
   says to proceed. After completing a step, **STOP and report** what was done and what's next, then
   wait for approval.
+- **No speculative work.** Build only what the current slice's spec calls for — **no speculative,
+  over-engineered, or "while I'm here" additions**, and never invent features beyond the slice. Do
+  not skip spec/plan and jump to implementation.
 - Rationale: the spec is the contract; sequencing by tier keeps the demo coherent and prevents
-  half-built surfaces.
+  half-built surfaces. Scope discipline is part of that contract — unrequested work is drift.
 
 ### X. Coding Conventions
 
@@ -318,16 +362,12 @@ Every vertical slice follows the Spec Kit sequence, in order:
 - Rationale: uniform conventions keep the fixtures-first codebase reviewable and the eventual
   real-data swap mechanical.
 
-### XI. Never-Do Rules
+### XI. Reference Integrity
 
-- **Never modify `/design-reference` or `/docs`.** They are read-only references.
-- **Never skip spec/plan and jump to implementation.**
-- **Never invent features outside the current slice's spec.** No speculative, over-engineered, or
-  "while I'm here" additions.
-- **Never add a dependency not in the locked stack (Principle III) without proposing it first.**
-- **Never use "amazing" / "awesome" or emoji in product microcopy.**
-- Rationale: these are the recurring failure modes that quietly erode the brand, the scope, and the
-  stack. They are listed as absolutes because each is cheap to violate and expensive to undo.
+Claude Code must never modify `/design-reference` (the design source is immutable; port, don't
+redesign — see V). Claude Code must not modify `/docs` as a side effect of a feature-implementation
+slice. Deliberate revisions to binding spec documents under `/docs` (e.g. the Render & Proof Spec)
+are permitted only as standalone, explicitly-instructed tasks that Cornel reviews and commits.
 
 ### XII. Handling Ambiguity — Stop and Ask
 
@@ -337,6 +377,60 @@ invent requirements.
 - Reference the specific `/design-reference` screen **by name** when raising the question.
 - Rationale: guessing produces drift from the design contract and the spec. A clarifying question
   is always cheaper than reworking a wrong build.
+
+### XIII. Port-Completeness (A-11)
+
+Render **only working controls.** A pictured-but-non-working control is either an honest "coming"
+state inside a working surface, or **hidden** — never a dead control that does nothing.
+
+- A control the current tier cannot back is removed or shown as an explicit, labelled "coming"
+  state behind the same UI seam its real implementation will swap into; it is never wired to nothing.
+- Rationale: a dead control lies about capability. Honest absence (or an honest "coming" label)
+  keeps every shipped surface truthful, which is the same trust Principle I depends on.
+
+### XIV. Owned Data Only (FR-019)
+
+Show only data Weavova **produces end to end.** Never present a fabricated capability or metric.
+
+- Seeded fixtures shaped like the real schema are fine (Principle VI); **invented metrics are not**
+  — no fabricated view counts, no synthetic engagement numbers. "Warmth" is **content-readiness,
+  not a sentiment score.**
+- Rationale: the product's whole claim is authenticity. A made-up number is the same category of
+  lie as a synthetic testimonial — it counterfeits proof the product does not have.
+
+### XV. Plan-Not-Code (render era)
+
+At run time the system proposes a **validated plan** (the `RenderPlan`); executable composition code
+is authored **only at build time**, human-reviewed, and committed.
+
+- The agent layer decides *presentation* only (pacing, emphasis, framing) and emits data, never
+  composition source. The plan is validated against the law guard before assembly.
+- Rationale: a per-clip agent is only safe if it cannot author the executable surface or alter the
+  customer's words. Plan-not-code is the structural boundary that makes the agent safe.
+  (Render & Proof Spec §1, §4.5, §5.)
+
+### XVI. No-LLM-in-Render (render era)
+
+Once a plan is validated and assembled, **render is deterministic and reproducible.** No model
+improvises mid-render.
+
+- Rationale: determinism is what lets us stand behind the "Verified real" stamp — the same inputs
+  always produce the same clip, and nothing between validation and output can fabricate or alter the
+  testimony. (Render & Proof Spec §1.)
+- **Testimony verbatim** (the governing law, Render & Proof Spec §1) is cross-referenced here: the
+  customer's words are never authored or altered by a model — only fixed for transcription error, by
+  a human.
+
+### XVII. Microcopy & Voice
+
+Product copy is plain and editorial — it matches the quiet, confident Pressroom voice and never
+oversells.
+
+- **No hype adjectives** — never use "amazing" / "awesome" or similar in product microcopy.
+- **No emoji** in UI copy.
+- Rationale: the brand's restraint is the brand (Principle IV) — the proof is loud, the chrome is
+  quiet. Hype copy and emoji are exactly the synthetic-marketing tone Weavova is counter-positioned
+  against (Principle I).
 
 ## Technology Constraints
 
@@ -379,4 +473,4 @@ Pressroom tokens exactly; keyboard-accessible; passes its acceptance criteria; b
 `CLAUDE.md` remains the runtime source of truth for project context; this constitution encodes its
 binding rules.
 
-**Version**: 1.1.2 | **Ratified**: 2026-06-12 | **Last Amended**: 2026-06-13
+**Version**: 1.4.0 | **Ratified**: 2026-06-12 | **Last Amended**: 2026-06-24

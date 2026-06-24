@@ -120,7 +120,7 @@
 ## Constitution Alignment *(mandatory)*
 
 <!--
-  ACTION REQUIRED: Confirm this spec is consistent with .specify/memory/constitution.md (v1.0.1).
+  ACTION REQUIRED: Confirm this spec is consistent with .specify/memory/constitution.md (v1.4.0).
   Keep this product-level (no implementation detail). Address each item; write N/A where a
   principle does not apply to this slice and say why.
 -->
@@ -136,9 +136,17 @@
   versioned, and revocable, and that revocation cascades — no clip from non-consented proof.
 - **No editor (P-VIII)**: if a studio/format surface is in scope, confirm it is a format picker,
   not a timeline/track/scrubber.
-- **Scope (P-IX, P-XI)**: this is a single vertical slice within the current tier; no speculative
+- **Scope (P-IX)**: this is a single vertical slice within the current tier; no speculative
   features beyond it.
-- **Microcopy (P-XI)**: product copy avoids "amazing"/"awesome" and emoji.
+- **Microcopy (P-XVII)**: product copy avoids "amazing"/"awesome" and emoji.
+- **Port-completeness (P-XIII)**: every rendered control works, or is an honest "coming" state /
+  hidden. No dead controls.
+- **Owned data only (P-XIV)**: only Weavova-produced data is shown. No fabricated capability or
+  metric (no invented counts/views; warmth = content-readiness, not a sentiment score).
+- **Plan-not-code (P-XV)**: runtime proposes a validated plan; no agent-authored composition code at
+  runtime. Mark "N/A — non-render slice" where it doesn't apply.
+- **No-LLM-in-render (P-XVI)**: render is deterministic after validation; no model in the render
+  path. Mark "N/A — non-render slice" where it doesn't apply.
 
 ## Assumptions
 

@@ -111,6 +111,9 @@ as read-only.** Port components from it faithfully — lift the markup and style
 embedded sample media for real asset references, and drive from props/fixtures. Do **not** reinvent
 layouts, restyle, or "improve" the design.
 
+> **Note (provenance).** The design files live in the **Drive `Weavova` folder** (authored by Claude
+> Design), not local-only. The repo's `design-reference/` is the working copy.
+
 | Folder | Screens |
 |---|---|
 | The spine | 01 Dashboard · 02 Proof inbox · 03 Proof detail · 04 Clip studio |
@@ -151,14 +154,13 @@ Tiers:
 - **T5** Remaining workspace surfaces — brand kits, consent, requests (library shipped at T3.1; the
   **Showcase wall (pre-distribution curate/preview half) shipped** — see T-Showcase; its publish/embed/
   curation cluster is **T9**).
-- **T6** Identity — real Auth.js, workspaces, onboarding (**first real data**).
-- **T7** Capture — collection page + sources (**first real customer proof**).
-- **T8** Media engine — real render worker (FFmpeg + Revideo), formats, R2 pipeline. (The clip detail —
-  built early at T3.2 — gets **real clip playback** swapped in here, behind its existing UI seam.)
-- **T9** Monetise & distribute — billing, settings, publishing, **the Showcase distribution cluster**
-  (publish/embed/share/public URLs + curation/"public set" — the coupled half deferred from T-Showcase) +
-  the public `/showcase[/slug]` site.
-- **T10** System, polish & launch.
+**Forward roadmap (T6→T9) is now governed by `Weavova-T7-T9-Plan-v2`.** Sequence: **T6** (real
+auth/workspaces) → **T7** (capture: the `ingest event → request` primitive + generic webhook +
+link/QR + Resend; native connectors a phased Sources track; scoped consent; normalize; verification
+basis) → **T8** (render: analyze → RenderPlan → validate → assemble → **deterministic render** + a
+build-time template-authoring track) → **T9** (distribute/monetize: showcase publish, embed,
+campaigns, takedown runbook, billing). T8 retires every "Sample preview" / metadata-card seam. The
+render architecture lives in `docs/Weavova-Render-Proof-Spec.md` (v0.3).
 
 **Current tier: T4 (bulk & exports) next.** Shipped to prod: T0–T2 (the spine, incl. T2.4a schema + T2.4b
 studio), **T3 (T3.1 Library + T3.2 clip detail)**, and **the Showcase wall (T-Showcase, pre-distribution
@@ -185,6 +187,15 @@ keyboard-accessible, passes its acceptance criteria, builds green.
   here" additions.**
 - **Never modify `/design-reference`.**
 - Don't introduce new dependencies without flagging them and why.
+
+**Cross-cutting rules (always-on):**
+- **Plan-not-code** — runtime emits a validated plan, never composition code (ref spec §1, §4.5).
+- **No-LLM-in-render** — render is deterministic after validation.
+- **Testimony-verbatim** — the agent decides presentation only; the customer's words are never
+  model-authored/altered.
+- **A-11** and **FR-019** are now elevated to constitution principles (see the constitution) — no
+  dead controls; no fabricated capability or metric (incl. no invented view counts; warmth =
+  content-readiness, not a sentiment score).
 
 ## 10. Commands
 
