@@ -163,7 +163,7 @@ unchanged; signed out, `/app/*` redirects to `/login` with no data flash (quicks
 
 **Independent test**: quickstart Scenario 2.
 
-- [ ] T020 [US2] Add the "Continue with Google" button to `src/app/login/page.tsx` (depends T018, same
+- [X] T020 [US2] Add the "Continue with Google" button to `src/app/login/page.tsx` (depends T018, same
       file → **not [P]**): triggers the Google provider; honest "sign-in not completed" state on
       cancel/deny (spec US2.3). **DoD (quickstart S2)**: Google flow completes to `/app`.
 
@@ -175,7 +175,7 @@ unchanged; signed out, `/app/*` redirects to `/login` with no data flash (quicks
 
 **Independent test**: quickstart Scenario 5.
 
-- [ ] T021 [US4] Add a real **sign-out** action to `src/components/app/user-menu.tsx` (currently
+- [X] T021 [US4] Add a real **sign-out** action to `src/components/app/user-menu.tsx` (currently
       display-only) calling `signOut` (depends T006). **P-V note**: this is an **additive control** on
       the chrome, not a change to a FR-021 *data* consumer's behaviour — surfaced here explicitly.
       **DoD (quickstart S5)**: sign-out returns to `/login`; `/app` then redirects when requested.
@@ -188,7 +188,7 @@ unchanged; signed out, `/app/*` redirects to `/login` with no data flash (quicks
 
 **Independent test**: quickstart Scenario 2 (linking half) + DB check (one user row, one membership).
 
-- [ ] T022 [US5] Verify account-linking-by-verified-email end to end (config already in `src/auth.ts`
+- [X] T022 [US5] Verify account-linking-by-verified-email end to end (config already in `src/auth.ts`
       via T006/T010 — this is a **verification** task, no new code): create a user via magic-link, then
       Google with the same verified email → **one** `user`, **one** `membership` (no duplicate). **DoD
       (quickstart S2)**: a single user/workspace under both providers; the T010 caveat comment is the

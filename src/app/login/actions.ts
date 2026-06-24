@@ -29,3 +29,11 @@ export async function sendMagicLink(formData: FormData) {
 
   redirect(`/verify?email=${encodeURIComponent(email)}`);
 }
+
+// Google sign-in (US2 / T020). The Google provider is already configured in
+// src/auth.ts (Increment 1) with allowDangerousEmailAccountLinking — same verified
+// email as a magic-link user → ONE user (FR-003). signIn performs its own OAuth
+// redirect, then lands on /app on success.
+export async function signInWithGoogle() {
+  await signIn("google", { redirectTo: "/app" });
+}

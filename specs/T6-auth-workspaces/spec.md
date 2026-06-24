@@ -415,6 +415,95 @@ Checked against `.specify/memory/constitution.md` (v1.4.0).
 - **Microcopy & Voice (P-XVII)**: auth copy is plain and editorial — no "amazing"/"awesome", no emoji;
   the "check your email", error, and any "coming" states are stated plainly.
 
+## Design reconciliation (Authentication)
+
+**Recorded 2026-06-25.** **Source (read, local):** `design-reference/Weavova/Authentication/` — 7 paired
+HTML+PNG screens: **1** Sign in, **2** Sign up / account, **3** Sign up / workspace, **4** Verify email,
+**5** Forgot password, **6** Reset password, **7** OAuth bridge. T6 increments 1–2 were built **without
+porting from these local screens** — a **Principle V (Port-Don't-Redesign) gap**. This section records
+the deliberate supersessions (so the divergence is a decision, not drift) and audits the built auth
+against the real source, with a remediation list. **No rebuild in this pass** — record + audit only.
+
+### Deliberate supersessions (Port-Don't-Redesign exception — Cornel, 2026-06-25)
+
+- **Auth method → magic-link (passwordless).** Supersedes the password design: screen **1**'s password
+  field, screen **2**'s password portion, screen **5** (Forgot password), and screen **6** (Reset
+  password) are **designed-but-superseded**. **No password storage, no reset flow.** (Magic-link + Google
+  was the locked T6 decision.)
+- **Verify → magic-link "check your email" (`/verify`).** Screen **4**'s 6-digit **code** input is
+  superseded by the magic-**link** page. Same intent (prove mailbox control), different mechanism:
+  **retain the screen's frame, drop the code input** (and the 6-box / resend-timer affordance).
+- **OAuth → Google only.** "Continue with **GitHub**" (screens **1**, **2**) is **dropped by decision**.
+- **NOT superseded — port faithfully (scheduled).** The signup → **workspace-creation** flow (screens
+  **2–3**: account step + "Name your workspace" / brand name / brand colour / Create workspace) is **real
+  designed onboarding**, planned as the **workspace-creation slice (T6.1 fast-follow, CLAUDE.md §8)**, to
+  be built **magic-link-native** (no password step).
+
+### Audit — built vs source
+
+**Screen 1 (Sign in) vs `src/app/login/page.tsx`:**
+
+| Source element | In build? | Verdict |
+|---|---|---|
+| Split layout (form beside a proof panel) | **No** | **UNINTENDED** — P-V gap |
+| "Verified real customer" persimmon mark | **No** | **UNINTENDED** — P-II/P-V gap |
+| Maria L. proof card (quote + ML avatar + "Shopify · Soy candle · Fig & Cedar") | **No** | **UNINTENDED** — P-II/P-V gap |
+| "The customer is the headline." line | Partial — present, but as a centered subtitle, not the left-panel footer | **UNINTENDED** (placement) — P-II |
+| Weavova wordmark + persimmon stamp glyph | Partial — text wordmark yes; stamp glyph no | UNINTENDED (minor) |
+| "Welcome back." heading | No (build says "Sign in") | UNINTENDED (minor copy) |
+| Email field | Yes | match |
+| Password field | No | **EXPECTED** (passwordless) |
+| "Forgot password?" link | No | **EXPECTED** (superseded) |
+| Persimmon primary button | Yes (as "Send magic link") | match (label per mechanism — expected) |
+| "or" divider | Yes | match |
+| Continue with Google | Yes | match |
+| Continue with GitHub | No | **EXPECTED** (dropped) |
+| "New here? Create an account" link | No | port gap → ties to the T6.1 signup/workspace slice |
+| Pressroom tokens (Fraunces/Hanken/persimmon-scarce) | Yes | match |
+
+**Screen 4 (Verify) vs `src/app/verify/page.tsx`:**
+
+| Source element | In build? | Verdict |
+|---|---|---|
+| Split layout + proof panel | **No** | **UNINTENDED** — P-V/P-II gap |
+| "Check your email." heading | Yes | match |
+| "We sent … to {email}" subcopy | Yes (link, not code) | match intent; **EXPECTED** mechanism divergence |
+| 6-digit code input boxes | No | **EXPECTED** (superseded by link) |
+| Persimmon "Verify email" submit | No | **EXPECTED** (link is clicked in the email; nothing to submit) |
+| "Didn't get it? Resend code · timer" | Partial — "request a new one" link, no timer | EXPECTED-ish (no code) — resend intent could still be ported |
+| "The customer is the headline." line | **No** | **UNINTENDED** — P-II gap |
+| Pressroom tokens | Yes | match |
+
+### Retained-element checklist (should have been ported regardless of auth method)
+
+- **Split layout (form beside proof panel)** — **MISSING** in both `/login` and `/verify`. **P-V gap**
+  (screens 1, 4). This is the parent gap; the rest hang off it.
+- **Maria L. "Verified real customer" proof card** — **MISSING** in both. **P-II/P-V gap** (screens 1, 4).
+- **"The customer is the headline." line** — `/login`: present but **repositioned** (centered subtitle, not
+  the left-panel footer); `/verify`: **missing**. **P-II gap** (both should carry it in the proof panel).
+- **Pressroom tokens (Fraunces/Hanken/persimmon-scarce), light + dark** — **PRESENT** and correct
+  (persimmon scarce — only on the primary action; tokens are theme-aware so dark derives). **PASS**, with
+  the minor exception of the persimmon **stamp logo glyph** (not ported).
+
+### Remediation list (port-fix pass — do NOT implement here; fold into Increment 3 or a dedicated pass)
+
+1. **Port the split-layout shell** (proof-panel column beside the form column) into **both** `/login` and
+   `/verify` — from `design-reference/Weavova/Authentication/1 _ Sign in` + `4 _ Verify email`. *(Parent
+   fix — P-V; everything below hangs off it.)*
+2. **Port the proof panel** into the left column of both: the **"Verified real customer"** persimmon mark
+   + the **Maria L.** quote card (quote, ML avatar, "Shopify · Soy candle · Fig & Cedar") + the **"The
+   customer is the headline."** footer line — screens 1 & 4. *(P-II on the auth surface.)*
+3. **`/login` heading** — restore **"Welcome back."** (Fraunces) per screen 1 (or confirm "Sign in" as an
+   intentional copy change). *(Minor — screen 1.)*
+4. **Persimmon stamp logo glyph** beside the "Weavova" wordmark — screen 1 (shared auth chrome).
+5. **`/verify`** — keep the magic-link supersession (no code boxes), but port the **frame** (split layout +
+   heading + proof panel) and style the **"request a new link"** affordance after the screen's "Resend"
+   row — screen 4.
+6. **(Scheduled, not a now-fix)** Build the **signup → workspace-creation** flow (screens **2–3**)
+   magic-link-native as the **T6.1 workspace-creation slice** — "New here? Create an account" → "Name your
+   workspace" (workspace name, brand name, brand colour, Create workspace). Resolves the dropped
+   "Create an account" link target.
+
 ## Assumptions
 
 - **Verified email is the linking key** (FR-003): magic-link inherently verifies the address; Google

@@ -162,6 +162,22 @@ build-time template-authoring track) → **T9** (distribute/monetize: showcase p
 campaigns, takedown runbook, billing). T8 retires every "Sample preview" / metadata-card seam. The
 render architecture lives in `docs/Weavova-Render-Proof-Spec.md` (v0.3).
 
+**Onboarding (designed — Drive "Onboarding" folder; screens 15 + 17 — now given a planned home):**
+- **T6.1 — First-run workspace creation (T6 fast-follow).** A newly authenticated user with **no
+  membership** gets a **create-your-first-workspace** flow (name the workspace, become its `owner`).
+  T6 itself assumes a pre-seeded workspace; T6.1 is the real new-user path. **Depends on** T6's auth +
+  membership schema — the `role` enum already ships at T6, so this is **additive** (no migration; it
+  replaces the auto-provision fallback in `src/auth.ts` with a real named-workspace step). Constitution:
+  **P-XIII** (no dead controls in the first-run flow), **P-XIV** (owned data only — no fabricated
+  starter content).
+- **T7 onboarding (scope addition to Capture).** T7 explicitly delivers the **source-connection
+  onboarding + empty/pending states**: screen **15** (new workspace / source pending — "connecting;
+  proof will start arriving once linked") and screen **17** (empty proof inbox — "connect a source").
+  These are the honest **A-11 / P-XIII** "coming"/empty states of the ingestion primitive **before the
+  first proof lands**, tied to the `ingest event → request → /c/[token]` primitive and the phased
+  **Sources track** already in T7. Constitution: **P-XIII** (empty/pending are honest states, not dead
+  ends).
+
 **Current tier: T4 (bulk & exports) next.** Shipped to prod: T0–T2 (the spine, incl. T2.4a schema + T2.4b
 studio), **T3 (T3.1 Library + T3.2 clip detail)**, and **the Showcase wall (T-Showcase, pre-distribution
 half)**. Deferred to **T9**: the Showcase publish/embed/share/curation cluster + the public site.
