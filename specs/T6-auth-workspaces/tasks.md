@@ -198,20 +198,20 @@ unchanged; signed out, `/app/*` redirects to `/login` with no data flash (quicks
 
 ## Phase 8: Cross-cutting (invites coming-state) & Polish / DoD
 
-- [ ] T023 [P] Add the **"Invite teammates — coming soon"** affordance to
+- [X] T023 [P] Add the **"Invite teammates — coming soon"** affordance to
       `src/components/app/workspace-switcher.tsx` popover (FR-019, P-XIII; **C2=A**). A visible, labeled
       coming-state row — **not** a dead button, **not** hidden. **Record the deviation**: a code comment
       noting FR-019 says "workspace settings" but settings is a **T9** surface, so the affordance lives
       in the switcher popover for now. **DoD**: the row renders, reads "coming soon", is non-interactive
       yet clearly honest (P-XIII).
-- [ ] T024 [P] Finalize `.env.example` + quickstart Prerequisites alignment (depends T002): ensure every
+- [X] T024 [P] Finalize `.env.example` + quickstart Prerequisites alignment (depends T002): ensure every
       `AUTH_*` + `SEED_OWNER_EMAIL` is documented with where-to-set (local + Vercel). **DoD**: a fresh
       checkout can follow quickstart Prerequisites to a working local sign-in.
-- [ ] T025 Migration apply + seed reconciliation: `npm run db:migrate` (apply `0004`) then `npm run
+- [X] T025 Migration apply + seed reconciliation: `npm run db:migrate` (apply `0004`) then `npm run
       db:seed` (T009) on the target DB; for the **shared prod DB**, the idempotent backfill path adds
       the demo user + owner membership without a destructive reseed. **DoD (quickstart Prereqs + S3)**:
       Lumen has exactly one demo owner; existing content intact and workspace-scoped.
-- [ ] T026 Polish & DoD gate: `npm run lint`, `npm run typecheck`, `npm run build` **green with no
+- [X] T026 Polish & DoD gate: `npm run lint`, `npm run typecheck`, `npm run build` **green with no
       `AUTH_*` set** (CI parity); run **all 7 quickstart.md scenarios** (both providers, seam regression
       T017, two-layer security, sign-out, invites coming-state, both couplings). Confirm **P-VII**:
       consent records/versioning/revocation/reads behave identically (no consent query changed).

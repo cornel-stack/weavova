@@ -7,10 +7,20 @@ answered and tasks are implemented.
 
 - `.env.local` with: `DATABASE_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`,
   `AUTH_RESEND_KEY`, `AUTH_EMAIL_FROM` (verified Resend sender), `AUTH_TRUST_HOST=true` (local), and
-  `SEED_OWNER_EMAIL` if C1=A.
+  `SEED_OWNER_EMAIL` (the demo owner's **login email**; the **display identity stays "Maya K."** — C1=A).
 - Google OAuth client redirect URIs registered (local + Vercel) — see plan Env table.
 - `npm run db:generate && npm run db:migrate` (apply `0004`), then `npm run db:seed` (creates the demo
   user + owner membership over the existing Lumen workspace).
+- **Passwordless + Google only** — there is no password field, no Forgot/Reset, and no GitHub button
+  (deliberately superseded; see the spec's "Design reconciliation").
+
+### Seed fixtures (T025 — resolved)
+
+The seed ships **15 proofs** for Lumen (4 text · 4 video · 4 photo · 3 audio) + 4 clips — the
+documented demo set. The inbox header count is **computed** from real data
+(`counts.total = proofs.length` → "15 of 15"), never hardcoded (P-XIV). The design mock screen 02's
+"12 of 12" is a **stale illustration**, not a data contract — no seed bug, no fix. The seed is
+re-runnable (destructive reset → always 15) and idempotently upserts the demo user + owner membership.
 
 ## Build / CI parity (no creds)
 
@@ -19,9 +29,11 @@ answered and tasks are implemented.
 
 ## Scenario 1 — Magic-link sign-in (US1)
 
-1. Visit `/` unauthenticated → redirected to `/login`.
-2. Enter `SEED_OWNER_EMAIL`, submit → `/verify` shows "magic-link sent / check your email" naming the
-   address.
+1. Visit `/` unauthenticated → redirected to `/login`. The page is the ported Pressroom **split frame**:
+   a proof panel (Maria L. "Verified real customer" card + "The customer is the headline.") beside the
+   form, with the **official Google logo** on "Continue with Google".
+2. Enter `SEED_OWNER_EMAIL`, submit → `/verify` shows "Check your email" (same split frame) naming the
+   address, with a "Request a new link" affordance (magic-LINK, not a 6-digit code).
 3. Open the email (Resend), click the link → land authenticated at `/app` (dashboard) showing **Lumen
    Candle Co.** data (the existing seeded proof).
 4. Expired/used link → honest error + "request a new link" (no broken page).
@@ -55,8 +67,10 @@ answered and tasks are implemented.
 
 ## Scenario 6 — Honest coming-state (FR-019, P-XIII)
 
-1. Open the invites affordance (placement per C2) → reads "Invite teammates — coming soon"; it is
-   visible and labeled, not a dead button and not hidden.
+1. Open the **workspace-switcher popover** (top bar) → it shows an **"Invite teammates"** row with a
+   **"Soon"** tag (C2=A placement — switcher popover, not the T9 settings surface). It is a
+   non-interactive labeled coming-state (muted, not a clickable/dead button, not a fake action), with no
+   fabricated member count (P-XIV).
 
 ## Scenario 7 — Flagged couplings (plan §6)
 
