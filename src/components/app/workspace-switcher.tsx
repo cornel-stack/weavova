@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronsUpDown, Plus } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, UserPlus } from "lucide-react";
 import type { ChromeWorkspace } from "./app-chrome";
 import { Popover } from "./popover";
 
@@ -70,6 +70,20 @@ export function WorkspaceSwitcher({
             <Plus className="size-4" strokeWidth={1.5} aria-hidden />
             New workspace
           </button>
+
+          {/* Invite teammates — honest "coming" state (FR-019, P-XIII). Placed in the
+              switcher popover (C2=A) rather than FR-019's literal "workspace settings",
+              which is a T9 surface. NOT a button (nothing to click yet) and NOT a fake
+              action — a labeled coming-state row with a "Soon" tag. No fabricated counts
+              (P-XIV). Invites land as a fast-follow on the owner/member schema. */}
+          <div className="my-1 border-t border-hairline" />
+          <div className="flex items-center gap-2 rounded-control px-2 py-2 font-ui text-body-sm text-ink-3">
+            <UserPlus className="size-4" strokeWidth={1.5} aria-hidden />
+            Invite teammates
+            <span className="ml-auto rounded-pill bg-sunken px-2 py-0.5 font-ui text-label uppercase tracking-wide text-ink-3">
+              Soon
+            </span>
+          </div>
         </div>
       )}
     </Popover>

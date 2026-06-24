@@ -5,11 +5,13 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { AdapterAccountType } from "next-auth/adapters";
 
 // `source.kind` is text + this code-side allowlist (open, growing integration
 // set — adding a platform must not require a schema migration). Validate at the
@@ -258,4 +260,95 @@ export const brandKit = pgTable(
       .defaultNow(),
   },
   (t) => [index("brand_kit_ws_idx").on(t.workspaceId)],
+);
+
+// ============================================================================
+// Auth.js v5 (T6) — the @auth/drizzle-adapter standard tables. ADDITIVE: no
+// existing table changes. These are VENDOR-SHAPED: column/property names follow
+// the canonical Auth.js Drizzle schema (camelCase, text id) so the adapter binds
+// to them — a deliberate, contained deviation from our snake_case house style.
+// The adapter generates user ids; `email` is the account-linking key (FR-003).
+// ============================================================================
+
+export const users = pgTable("user", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name"),
+  email: text("email").notNull().unique(),
+  emailVerified: timestamp("emailVerified", { withTimezone: true }),
+  image: text("image"),
+});
+
+export const accounts = pgTable(
+  "account",
+  {
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").$type<AdapterAccountType>().notNull(),
+    provider: text("provider").notNull(),
+    providerAccountId: text("providerAccountId").notNull(),
+    refresh_token: text("refresh_token"),
+    access_token: text("access_token"),
+    expires_at: integer("expires_at"),
+    token_type: text("token_type"),
+    scope: text("scope"),
+    id_token: text("id_token"),
+    session_state: text("session_state"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.provider, t.providerAccountId] }),
+  ],
+);
+
+export const sessions = pgTable("session", {
+  sessionToken: text("sessionToken").primaryKey(),
+  userId: text("userId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expires: timestamp("expires", { withTimezone: true }).notNull(),
+});
+
+export const verificationTokens = pgTable(
+  "verificationToken",
+  {
+    identifier: text("identifier").notNull(),
+    token: text("token").notNull(),
+    expires: timestamp("expires", { withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.identifier, t.token] })],
+);
+
+// ============================================================================
+// Membership (T6) — the user↔workspace link, app-level (NOT an adapter table).
+// Carries `role` from the first migration (FR-018): owner = full access; member
+// = read + create-clip only (enforcement is minimal v1 — see data-model.md).
+// UNIQUE (userId, workspaceId) makes provisioning/backfill idempotent. `workspace`
+// is UNCHANGED; content rows keep their workspaceId (no ownership backfill).
+// ============================================================================
+export const membershipRoleEnum = pgEnum("membership_role", [
+  "owner",
+  "member",
+]);
+
+export const membership = pgTable(
+  "membership",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    role: membershipRoleEnum("role").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("membership_user_workspace_unique").on(t.userId, t.workspaceId),
+    index("membership_user_idx").on(t.userId),
+  ],
 );

@@ -4,9 +4,11 @@ import {
   brandKit,
   consent,
   derivedAsset,
+  membership,
   proof,
   proofBrandAsset,
   source,
+  users,
   workspace,
   type SourceKind,
 } from "./schema.ts";
@@ -164,13 +166,16 @@ async function seed() {
 
   // Reset (FK-safe order) so the seed is re-runnable. The join + derived_asset
   // first (they reference proof/brand_asset/consent/workspace), then brand_asset
-  // (before workspace), then the rest.
+  // (before workspace), then the rest. T6: membership before workspace (it FKs
+  // workspace). We do NOT delete `users`/`account`/`session` — real auth identities
+  // are preserved across reseeds; only the demo membership is re-pointed below.
   await db.delete(derivedAsset);
   await db.delete(proofBrandAsset);
   await db.delete(brandKit);
   await db.delete(consent);
   await db.delete(proof);
   await db.delete(brandAsset);
+  await db.delete(membership);
   await db.delete(source);
   await db.delete(workspace);
 
@@ -178,6 +183,24 @@ async function seed() {
     .insert(workspace)
     .values({ name: "Lumen Candle Co.", slug: "lumen" })
     .returning({ id: workspace.id });
+
+  // T6 (C1=A) — the demo workspace OWNER. The LOGIN email is SEED_OWNER_EMAIL (the
+  // mailbox Cornel controls, so the magic-link / Google flows actually reach the demo
+  // workspace), but the DISPLAY identity stays "Maya K." so the chrome reads as the
+  // demo persona — login email and display identity are deliberately separate.
+  // Idempotent: upsert the user by email (preserved across reseeds / re-asserts the
+  // name); the membership re-points to the fresh workspace each reseed. NO content
+  // backfill — proof/clip/etc. already carry workspaceId.
+  const ownerEmail = process.env.SEED_OWNER_EMAIL ?? "amalacornel@gmail.com";
+  const [demoUser] = await db
+    .insert(users)
+    .values({ name: "Maya K.", email: ownerEmail })
+    .onConflictDoUpdate({ target: users.email, set: { name: "Maya K." } })
+    .returning({ id: users.id });
+  await db
+    .insert(membership)
+    .values({ userId: demoUser.id, workspaceId: ws.id, role: "owner" })
+    .onConflictDoNothing();
 
   const sourceIdByKind = new Map<SourceKind, string>();
   for (const s of SOURCES) {
@@ -296,7 +319,7 @@ async function seed() {
   });
 
   console.log(
-    `seeded: workspace=1 sources=${SOURCES.length} proofs=${proofCount} consent=${consentCount} clips=${clipCount} brandAssets=${brandAssetCount} attachments=${attachmentCount} brandKit=1`,
+    `seeded: workspace=1 owner=${ownerEmail} (display "Maya K.") membership=1 sources=${SOURCES.length} proofs=${proofCount} consent=${consentCount} clips=${clipCount} brandAssets=${brandAssetCount} attachments=${attachmentCount} brandKit=1`,
   );
 }
 
