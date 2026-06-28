@@ -13,6 +13,7 @@ import {
   type SourceKind,
 } from "./schema.ts";
 import { SAMPLE_CLIP_URL } from "../lib/clip.ts";
+import { resolveDisplay } from "../lib/consent.ts";
 
 type ProofType = "text" | "video" | "photo" | "audio";
 type ConsentState = "granted" | "awaiting" | "revoked";
@@ -179,9 +180,20 @@ async function seed() {
   await db.delete(source);
   await db.delete(workspace);
 
+  // T7.1 — the workspace display DEFAULT new captures (T7.2) inherit: first-initial
+  // naming, face shown. Privacy-forward but usable; a customer override may only move
+  // MORE private than this (resolveDisplay). Distinct from the migration backfill of
+  // EXISTING rows (full) — that preserves legacy verbatim presentation; this is the new
+  // default for fresh data.
+  const WS_DISPLAY_DEFAULT = { nameDisplay: "first_initial", showFace: true } as const;
   const [ws] = await db
     .insert(workspace)
-    .values({ name: "Lumen Candle Co.", slug: "lumen" })
+    .values({
+      name: "Lumen Candle Co.",
+      slug: "lumen",
+      defaultNameDisplay: WS_DISPLAY_DEFAULT.nameDisplay,
+      defaultShowFace: WS_DISPLAY_DEFAULT.showFace,
+    })
     .returning({ id: workspace.id });
 
   // T6 (C1=A) — the demo workspace OWNER. The LOGIN email is SEED_OWNER_EMAIL (the
@@ -238,6 +250,13 @@ async function seed() {
     proofCount += 1;
 
     for (const c of f.consent) {
+      // T7.1 — the ConsentDisplay payload. GRANTED versions get FULL scope (honest
+      // full-trust demo coherence — the prior "usable everywhere" meaning, P-XIV);
+      // non-granted (awaiting/revoked) versions grant NOTHING ('{}'). Display is routed
+      // through resolveDisplay (the SOLE sanctioned write path) against the workspace
+      // default with NO override → the default itself; nothing here is set less private
+      // than the workspace default.
+      const display = resolveDisplay(WS_DISPLAY_DEFAULT);
       const [crow] = await db
         .insert(consent)
         .values({
@@ -247,6 +266,12 @@ async function seed() {
           revokedAt: c.revokedAt ?? null,
           version: c.version,
           captureContext: CAPTURE_CONTEXT,
+          useScope:
+            c.state === "granted"
+              ? ["organic", "paid", "showcase", "embed"]
+              : [],
+          nameDisplay: display.nameDisplay,
+          showFace: display.showFace,
         })
         .returning({ id: consent.id });
       consentIdByProofVersion.set(`${row.id}:${c.version}`, crow.id);

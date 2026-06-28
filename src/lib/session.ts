@@ -62,6 +62,10 @@ export async function getCurrentWorkspace(): Promise<Workspace> {
         id: workspace.id,
         name: workspace.name,
         slug: workspace.slug,
+        // T7.1 — carry the workspace display defaults so the returned Workspace matches
+        // the (widened) full-row type. Inert today; the capture form (T7.2) reads them.
+        defaultNameDisplay: workspace.defaultNameDisplay,
+        defaultShowFace: workspace.defaultShowFace,
         createdAt: workspace.createdAt,
       })
       .from(membership)

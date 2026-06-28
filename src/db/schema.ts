@@ -37,12 +37,36 @@ export const consentStateEnum = pgEnum("consent_state", [
   "awaiting",
   "revoked",
 ]);
+// The scoped-consent payload (T7.1). `consent_scope` is the ENFORCEABLE gate set —
+// which uses a customer permitted (organic post / paid ad / public showcase /
+// embeddable block). A closed enum keeps an "unknown scope" unrepresentable at write
+// time (FR-012); stored as a `consent_scope[]` array so the fail-closed scope gate is
+// one GIN-indexed containment predicate, never a jsonb scan. `name_display` is how the
+// customer is named on a clip (presentation-only — never gated). Least-privilege:
+// a new consent grants `organic` only; broader scopes are explicit opt-ins.
+export const consentScopeEnum = pgEnum("consent_scope", [
+  "organic",
+  "paid",
+  "showcase",
+  "embed",
+]);
+export const nameDisplayEnum = pgEnum("name_display", [
+  "full",
+  "first_initial",
+  "anonymous",
+]);
 
 // The tenant a proof belongs to. Minimal for now; real workspaces/auth at T6.
 export const workspace = pgTable("workspace", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  // T7.1 (Q1=A) — the workspace-level display DEFAULT a customer override starts from
+  // (nullable → BUILTIN_DISPLAY_DEFAULT when unset). The workspace row is the natural
+  // per-workspace singleton; brand_kit was rejected (multi-row, no workspaceId unique).
+  // A customer can only override toward MORE privacy than this default (resolveDisplay).
+  defaultNameDisplay: nameDisplayEnum("default_name_display"),
+  defaultShowFace: boolean("default_show_face"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -105,6 +129,16 @@ export const consent = pgTable(
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     version: integer("version").notNull(),
     captureContext: jsonb("capture_context"),
+    // T7.1 — the ConsentDisplay payload, per version (the version is the effective one
+    // when it's the latest). `useScope` is the enforceable gate (default '{}' = permits
+    // NOTHING — the fail-closed baseline; the app insert sets ['organic'] explicitly for
+    // a new grant, so intent is auditable, not a DB default). `nameDisplay`/`showFace`
+    // are presentation-only and nullable → resolved at read via the workspace default →
+    // BUILTIN_DISPLAY_DEFAULT fallback chain. Typed columns only — NO jsonb (captureContext
+    // is untouched, it records capture provenance, not display prefs).
+    useScope: consentScopeEnum("use_scope").array().notNull().default([]),
+    nameDisplay: nameDisplayEnum("name_display"),
+    showFace: boolean("show_face"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -112,6 +146,9 @@ export const consent = pgTable(
   (t) => [
     uniqueIndex("consent_proof_version_unique").on(t.proofId, t.version),
     index("consent_proof_version_idx").on(t.proofId, t.version.desc()),
+    // GIN serves `use_scope @> array[...]` containment for the fail-closed scope gate
+    // (the T9 forward-contract) without a per-row JSON parse.
+    index("consent_use_scope_gin").using("gin", t.useScope),
   ],
 );
 

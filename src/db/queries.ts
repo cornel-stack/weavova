@@ -27,9 +27,13 @@ import type { ConsentState, ProofDetailView, ProofView } from "@/lib/proof";
 import type { ShowcaseItem } from "@/lib/showcase";
 import { sampleVideoRef, type PostTextPackage } from "@/lib/export";
 import {
+  BUILTIN_DISPLAY_DEFAULT,
   CONSENT_PURPOSE,
+  type ConsentDisplay,
   type ConsentLedgerEntry,
+  type ConsentScope,
   type ConsentVersionEntry,
+  type NameDisplay,
   type ProofConsentClip,
 } from "@/lib/consent";
 import type { BrandKitFonts, BrandKitView } from "@/lib/brand-kit";
@@ -70,6 +74,26 @@ function effectiveConsentState(proofIdColumn: AnyColumn) {
 // so this read-time gate (not a DB cascade) is the P-VII enforcement.
 function effectiveConsentGranted(proofIdColumn: AnyColumn) {
   return sql`${effectiveConsentState(proofIdColumn)} = 'granted'`;
+}
+
+// T7.1 — the FAILS-CLOSED scope gate (the T9 forward-contract). True iff the proof's
+// EFFECTIVE (latest) consent is granted AND its use_scope contains `scope`. Built on the
+// same latest-version subselect as effectiveConsentGranted; the GIN index on use_scope
+// serves the `@>` containment (no per-row JSON parse). The trailing `is true` coerces a
+// missing row / null (no consent) → FALSE — a non-granted or scope-absent consent denies
+// in SQL, not just app logic. T9 uses this to express "only clips whose consent grants
+// scope X" as one indexed WHERE predicate.
+function effectiveConsentGrantsScope(
+  proofIdColumn: AnyColumn,
+  scope: ConsentScope,
+) {
+  return sql`(
+  select c.state = 'granted' and c.use_scope @> array[${scope}]::consent_scope[]
+  from ${consent} c
+  where c.proof_id = ${proofIdColumn}
+  order by c.version desc
+  limit 1
+) is true`;
 }
 
 // The proof reads use the shared helper bound to proof.id — identical generated SQL
@@ -179,6 +203,30 @@ const latestConsentVersion = sql<number | string | null>`(
 // awaiting → createdAt (capture time). coalesce over the latest-version row.
 const latestConsentEffectiveAt = sql<Date | string | null>`(
   select coalesce(c.revoked_at, c.granted_at, c.created_at) from ${consent} c
+  where c.proof_id = ${proof.id}
+  order by c.version desc
+  limit 1
+)`;
+
+// T7.1 — the ConsentDisplay payload of the EFFECTIVE (latest) version, as sibling
+// subselects mirroring latestConsentVersion exactly (same latest-version-wins
+// resolution). ADDITIVE: the helpers above are byte-unchanged; these are NEW and are
+// consumed only by the new getEffectiveConsentDisplay read (no existing surface reads
+// them, so every FR-010 consumer stays byte-stable).
+const latestConsentScope = sql<ConsentScope[] | null>`(
+  select c.use_scope from ${consent} c
+  where c.proof_id = ${proof.id}
+  order by c.version desc
+  limit 1
+)`;
+const latestConsentNameDisplay = sql<NameDisplay | null>`(
+  select c.name_display from ${consent} c
+  where c.proof_id = ${proof.id}
+  order by c.version desc
+  limit 1
+)`;
+const latestConsentShowFace = sql<boolean | null>`(
+  select c.show_face from ${consent} c
   where c.proof_id = ${proof.id}
   order by c.version desc
   limit 1
@@ -398,13 +446,30 @@ export async function getProofClips(
 // cross-workspace or missing proofId yields null (no leak). withDbRetry-wrapped
 // (a read — safe to retry). The latest version row is the effective one; the
 // `effectiveConsentGranted` predicate guarantees that latest row's state is granted.
+//
+// T7.1 — the return is WIDENED ADDITIVELY to carry the granted version's ConsentDisplay
+// payload (useScope + resolved nameDisplay/showFace). Existing callers read only
+// `.consentId` and are byte-stable (the generate gate, recordConsentWithdrawal); the new
+// fields are available for the generate path / verified bar later. Display nulls fall back
+// to BUILTIN_DISPLAY_DEFAULT (the read-side coalesce; the workspace default is applied at
+// write via resolveDisplay — by the granted version's stored value here).
 export async function getGrantedConsentId(
   workspaceId: string,
   proofId: string,
-): Promise<{ consentId: string } | null> {
+): Promise<{
+  consentId: string;
+  useScope: ConsentScope[];
+  nameDisplay: NameDisplay;
+  showFace: boolean;
+} | null> {
   return withDbRetry(async () => {
     const rows = await getDb()
-      .select({ consentId: consent.id })
+      .select({
+        consentId: consent.id,
+        useScope: consent.useScope,
+        nameDisplay: consent.nameDisplay,
+        showFace: consent.showFace,
+      })
       .from(consent)
       .innerJoin(proof, eq(consent.proofId, proof.id))
       .where(
@@ -416,7 +481,66 @@ export async function getGrantedConsentId(
       )
       .orderBy(desc(consent.version))
       .limit(1);
-    return rows[0] ?? null;
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      consentId: row.consentId,
+      useScope: row.useScope ?? [],
+      nameDisplay: row.nameDisplay ?? BUILTIN_DISPLAY_DEFAULT.nameDisplay,
+      showFace: row.showFace ?? BUILTIN_DISPLAY_DEFAULT.showFace,
+    };
+  });
+}
+
+// T7.1 — getEffectiveConsentDisplay: the clean entry point downstream slices (T7.2
+// capture form, the verified bar) consume to render a clip exactly as the customer
+// chose. Returns the EFFECTIVE (latest) version's resolved { useScope, nameDisplay,
+// showFace }, or null when the proof has no consent row. Workspace-scoped via the proof
+// join (no cross-workspace leak). Display nulls fall back through BUILTIN_DISPLAY_DEFAULT
+// (the stored value is already privacy-resolved at write via resolveDisplay). NOT called
+// by any existing surface in this slice — every FR-010 consumer stays byte-stable.
+export async function getEffectiveConsentDisplay(
+  workspaceId: string,
+  proofId: string,
+): Promise<ConsentDisplay | null> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        useScope: latestConsentScope,
+        nameDisplay: latestConsentNameDisplay,
+        showFace: latestConsentShowFace,
+        hasConsent: sql<boolean>`exists (select 1 from ${consent} c where c.proof_id = ${proof.id})`,
+      })
+      .from(proof)
+      .where(and(eq(proof.workspaceId, workspaceId), eq(proof.id, proofId)))
+      .limit(1);
+    const row = rows[0];
+    if (!row || !row.hasConsent) return null;
+    return {
+      useScope: row.useScope ?? [],
+      nameDisplay: row.nameDisplay ?? BUILTIN_DISPLAY_DEFAULT.nameDisplay,
+      showFace: row.showFace ?? BUILTIN_DISPLAY_DEFAULT.showFace,
+    };
+  });
+}
+
+// T7.1 — consentGrantsScope: the imperative form of the fails-closed scope gate (the SQL
+// predicate effectiveConsentGrantsScope, surfaced as an async boolean for channel checks).
+// Returns false for missing / cross-workspace / non-granted / scope-absent; true only when
+// the effective granted version's use_scope contains `scope`. T9 distribution gates
+// channels on this (e.g. an organic-only clip cannot be used in a paid campaign).
+export async function consentGrantsScope(
+  workspaceId: string,
+  proofId: string,
+  scope: ConsentScope,
+): Promise<boolean> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({ grants: effectiveConsentGrantsScope(proof.id, scope) })
+      .from(proof)
+      .where(and(eq(proof.workspaceId, workspaceId), eq(proof.id, proofId)))
+      .limit(1);
+    return rows[0]?.grants === true;
   });
 }
 
