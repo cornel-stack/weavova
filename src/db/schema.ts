@@ -22,6 +22,10 @@ export const SOURCE_KINDS = [
   "instagram",
   "calendly",
   "square",
+  // T7.2 — the public capture link (/c/[token]). A real owned channel: a proof captured
+  // via a request link gets a `link` source (label "Capture link"). Code-side allowlist
+  // only (source.kind is text), so this is additive — NO migration.
+  "link",
 ] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
 
@@ -389,3 +393,68 @@ export const membership = pgTable(
     index("membership_user_idx").on(t.userId),
   ],
 );
+
+// ============================================================================
+// Capture (T7.2) — the request primitive + verification basis. ADDITIVE: no
+// existing table/column changes. A `capture_request` addresses a real customer to
+// the public /c/[token] page; the token is PER-REQUEST, SINGLE-USE, and EXPIRING
+// (72h). `verification_basis` records WHY a proof can later earn the "Verified real"
+// stamp — a REAL consent leg (captured at /c/[token]) + a STUB transaction leg
+// (transaction_verified_at stays null until T7.5). No stamp is shown until both legs
+// exist; proof.verified stays false this slice.
+// ============================================================================
+export const captureRequestStatusEnum = pgEnum("capture_request_status", [
+  "open",
+  "used",
+  "expired",
+]);
+
+export const captureRequest = pgTable(
+  "capture_request",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    // the capture channel the resulting proof is sourced from (the `link` source)
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => source.id, { onDelete: "restrict" }),
+    // per-request, high-entropy, URL-safe; the public lookup key + the single-use guard
+    token: text("token").notNull(),
+    customerName: text("customer_name"), // brand-addressed prompt / thank-you (nullable)
+    transactionRef: text("transaction_ref"), // transaction-leg context for the T7.5 verified bar
+    status: captureRequestStatusEnum("status").notNull().default("open"),
+    // authoritative access check is `expires_at > now()`; a stale status never grants access
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("capture_request_token_unique").on(t.token),
+    index("capture_request_ws_idx").on(t.workspaceId),
+  ],
+);
+
+export const verificationBasis = pgTable("verification_basis", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  proofId: uuid("proof_id")
+    .notNull()
+    .references(() => proof.id, { onDelete: "cascade" }),
+  requestId: uuid("request_id")
+    .notNull()
+    .references(() => captureRequest.id, { onDelete: "restrict" }),
+  // the consent leg — REAL (set when the customer grants consent at capture)
+  consentCapturedAt: timestamp("consent_captured_at", {
+    withTimezone: true,
+  }).notNull(),
+  // the transaction leg — STUB (null this slice; set in T7.5). Both non-null ⇒ verifiable.
+  transactionVerifiedAt: timestamp("transaction_verified_at", {
+    withTimezone: true,
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});

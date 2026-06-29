@@ -1,14 +1,16 @@
-import { and, asc, desc, eq, inArray, sql, type AnyColumn } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, sql, type AnyColumn } from "drizzle-orm";
 import { getDb } from "./client";
 import { withDbRetry } from "./with-retry";
 import {
   brandAsset,
   brandKit,
+  captureRequest,
   consent,
   derivedAsset,
   proof,
   proofBrandAsset,
   source,
+  verificationBasis,
   workspace,
 } from "./schema";
 import {
@@ -36,6 +38,14 @@ import {
   type NameDisplay,
   type ProofConsentClip,
 } from "@/lib/consent";
+import {
+  CAPTURE_COMING_PATHS,
+  CAPTURE_TOKEN_TTL_HOURS,
+  CAPTURE_WIRED_PATHS,
+  type CaptureRequestView,
+  type CaptureResolution,
+} from "@/lib/capture";
+import type { ProofType } from "@/lib/proof";
 import type { BrandKitFonts, BrandKitView } from "@/lib/brand-kit";
 
 export type Workspace = typeof workspace.$inferSelect;
@@ -1270,4 +1280,234 @@ export async function upsertBrandKit(
     .values({ workspaceId, ...values })
     .returning(returning);
   return toBrandKitView(rows[0]);
+}
+
+// ============================================================================
+// Capture (T7.2) — the request primitive + the public, TOKEN-SCOPED reads/writes
+// for /c/[token]. These NEVER resolve identity from a session (no getCurrentWorkspace);
+// the TOKEN is the capability. ADDITIVE: no existing read/table is touched. The send
+// write-path writes a proof shaped IDENTICALLY to the fixtures (source kind 'link'), a
+// REAL granted T7.1 consent version (organic-only, display via resolveDisplay), and a
+// verification-basis STUB — so the existing owner reads render captured proof unchanged.
+// ============================================================================
+
+// Create a capture request: a per-request, single-use, 72h-expiring token (T006).
+// `sourceId` is the workspace's `link` capture source. Server-generated token + expiry.
+export async function createCaptureRequest(
+  workspaceId: string,
+  sourceId: string,
+  opts: { customerName?: string | null; transactionRef?: string | null } = {},
+): Promise<{ token: string; expiresAt: Date }> {
+  const token = crypto.randomUUID();
+  const expiresAt = new Date(
+    Date.now() + CAPTURE_TOKEN_TTL_HOURS * 60 * 60 * 1000,
+  );
+  await getDb().insert(captureRequest).values({
+    workspaceId,
+    sourceId,
+    token,
+    customerName: opts.customerName ?? null,
+    transactionRef: opts.transactionRef ?? null,
+    status: "open",
+    expiresAt,
+  });
+  return { token, expiresAt };
+}
+
+// PUBLIC token resolution (T007) — token → request → workspace → brand. Returns a
+// discriminated result; NO workspace identifiers leak on a bad token. Authoritative
+// expiry is `expires_at > now()` (a stale status never grants access). withDbRetry
+// (a read). Calls getBrandKit (hoisted) — no session anywhere.
+export async function getCaptureRequestByToken(
+  token: string,
+): Promise<CaptureResolution> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        workspaceId: captureRequest.workspaceId,
+        customerName: captureRequest.customerName,
+        status: captureRequest.status,
+        expiresAt: captureRequest.expiresAt,
+        workspaceName: workspace.name,
+        defaultNameDisplay: workspace.defaultNameDisplay,
+        defaultShowFace: workspace.defaultShowFace,
+      })
+      .from(captureRequest)
+      .innerJoin(workspace, eq(captureRequest.workspaceId, workspace.id))
+      .where(eq(captureRequest.token, token))
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) return { status: "not_found" };
+    if (row.status === "used") return { status: "used" };
+    if (new Date(row.expiresAt).getTime() <= Date.now())
+      return { status: "expired" };
+
+    const kit = await getBrandKit(row.workspaceId);
+    const view: CaptureRequestView = {
+      token,
+      customerName: row.customerName,
+      workspaceName: row.workspaceName,
+      brand: kit
+        ? {
+            logoAssetUrl: kit.logoAssetUrl,
+            brandColor: kit.brandColor,
+            fonts: { display: kit.fonts.display, body: kit.fonts.body },
+          }
+        : null,
+      display: {
+        nameDisplay: row.defaultNameDisplay ?? BUILTIN_DISPLAY_DEFAULT.nameDisplay,
+        showFace: row.defaultShowFace ?? BUILTIN_DISPLAY_DEFAULT.showFace,
+      },
+      wiredPaths: CAPTURE_WIRED_PATHS,
+      comingPaths: CAPTURE_COMING_PATHS,
+    };
+    return { status: "ok", request: view };
+  });
+}
+
+// The workspace's display DEFAULT (the server-owned privacy FLOOR for the capture
+// write-path). The customer's override may only move MORE private than this; the action
+// reads this server-side (never trusts the client floor) and feeds it to resolveDisplay.
+export async function getWorkspaceDisplayDefault(
+  workspaceId: string,
+): Promise<{ nameDisplay: NameDisplay; showFace: boolean }> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        nameDisplay: workspace.defaultNameDisplay,
+        showFace: workspace.defaultShowFace,
+      })
+      .from(workspace)
+      .where(eq(workspace.id, workspaceId))
+      .limit(1);
+    const row = rows[0];
+    return {
+      nameDisplay: row?.nameDisplay ?? BUILTIN_DISPLAY_DEFAULT.nameDisplay,
+      showFace: row?.showFace ?? BUILTIN_DISPLAY_DEFAULT.showFace,
+    };
+  });
+}
+
+// The ATOMIC single-use guard (T008) — one conditional UPDATE. Flips open→used iff the
+// token is currently open AND unexpired, returning the request context; else null. This
+// is the concurrency control (like the (proofId,version) unique guard): a second submit
+// on a consumed/expired token gets null. NOT withDbRetry-wrapped — a blind retry of a
+// consuming write is unsafe (D4 precedent).
+export async function consumeCaptureToken(token: string): Promise<{
+  requestId: string;
+  workspaceId: string;
+  sourceId: string;
+  customerName: string | null;
+  transactionRef: string | null;
+} | null> {
+  const rows = await getDb()
+    .update(captureRequest)
+    .set({ status: "used", usedAt: new Date() })
+    .where(
+      and(
+        eq(captureRequest.token, token),
+        eq(captureRequest.status, "open"),
+        gt(captureRequest.expiresAt, new Date()),
+      ),
+    )
+    .returning({
+      requestId: captureRequest.id,
+      workspaceId: captureRequest.workspaceId,
+      sourceId: captureRequest.sourceId,
+      customerName: captureRequest.customerName,
+      transactionRef: captureRequest.transactionRef,
+    });
+  return rows[0] ?? null;
+}
+
+// The capture send write-path (T018). Token already consumed by consumeCaptureToken;
+// this writes the three rows in ONE db.batch (neon-http has no interactive txn) with
+// client-generated UUIDs so dependent ids are known. proof is FIXTURE-SHAPED; consent
+// is a REAL granted T7.1 version (organic-only; display already resolved via
+// resolveDisplay by the caller); verification_basis is a STUB (transaction leg null).
+// All-or-nothing: a batch failure writes nothing (no partial/orphan proof).
+export async function writeCapturedProof(input: {
+  workspaceId: string;
+  sourceId: string;
+  requestId: string;
+  customerName: string;
+  proofType: ProofType;
+  quote: string | null;
+  transcript: string | null;
+  display: { nameDisplay: NameDisplay; showFace: boolean };
+}): Promise<{ proofId: string }> {
+  const proofId = crypto.randomUUID();
+  const consentId = crypto.randomUUID();
+  const basisId = crypto.randomUUID();
+  const now = new Date();
+
+  await getDb().batch([
+    getDb().insert(proof).values({
+      id: proofId,
+      workspaceId: input.workspaceId,
+      customerName: input.customerName,
+      proofType: input.proofType,
+      quote: input.quote,
+      transcript: input.transcript,
+      sourceId: input.sourceId,
+      capturedAt: now,
+      reviewed: false,
+      verified: false, // NO stamp — the transaction leg is a stub (T7.5)
+      thumbnail: null,
+    }),
+    getDb().insert(consent).values({
+      id: consentId,
+      proofId,
+      state: "granted",
+      grantedAt: now,
+      version: 1,
+      useScope: ["organic"], // least-privilege (P-VII)
+      nameDisplay: input.display.nameDisplay,
+      showFace: input.display.showFace,
+      captureContext: { method: "capture_page", requestId: input.requestId },
+    }),
+    getDb().insert(verificationBasis).values({
+      id: basisId,
+      proofId,
+      requestId: input.requestId,
+      consentCapturedAt: now, // the consent leg — REAL
+      transactionVerifiedAt: null, // the transaction leg — STUB (T7.5)
+    }),
+  ]);
+
+  return { proofId };
+}
+
+// Dev-only listing (T009) — seeded capture requests + their links for end-to-end
+// testing (the dev styleguide/data surface, 404 in prod). NOT a ported merchant
+// surface (05/06 → T7.4); QR is deferred (C1 = link-only).
+export async function listCaptureRequests(
+  workspaceId: string,
+): Promise<
+  Array<{
+    token: string;
+    status: string;
+    expiresAt: string;
+    customerName: string | null;
+  }>
+> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        token: captureRequest.token,
+        status: captureRequest.status,
+        expiresAt: captureRequest.expiresAt,
+        customerName: captureRequest.customerName,
+      })
+      .from(captureRequest)
+      .where(eq(captureRequest.workspaceId, workspaceId))
+      .orderBy(desc(captureRequest.createdAt));
+    return rows.map((r) => ({
+      token: r.token,
+      status: r.status,
+      expiresAt: new Date(r.expiresAt).toISOString(),
+      customerName: r.customerName,
+    }));
+  });
 }

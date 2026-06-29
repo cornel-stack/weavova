@@ -2,6 +2,7 @@ import { getDb } from "./client.ts";
 import {
   brandAsset,
   brandKit,
+  captureRequest,
   consent,
   derivedAsset,
   membership,
@@ -9,6 +10,7 @@ import {
   proofBrandAsset,
   source,
   users,
+  verificationBasis,
   workspace,
   type SourceKind,
 } from "./schema.ts";
@@ -43,6 +45,10 @@ const SOURCES: { kind: SourceKind; label: string }[] = [
   { kind: "instagram", label: "Instagram" },
   { kind: "calendly", label: "Calendly" },
   { kind: "square", label: "Square" },
+  // T7.2 — the public capture-link channel. A proof captured via /c/[token] is
+  // sourced here (label "Capture link"). Unused by the existing fixtures; it backs
+  // the seeded capture_requests below.
+  { kind: "link", label: "Capture link" },
 ];
 
 const granted = (at: string): ConsentVersion[] => [
@@ -170,11 +176,13 @@ async function seed() {
   // (before workspace), then the rest. T6: membership before workspace (it FKs
   // workspace). We do NOT delete `users`/`account`/`session` — real auth identities
   // are preserved across reseeds; only the demo membership is re-pointed below.
+  await db.delete(verificationBasis); // T7.2 — FKs proof + capture_request
   await db.delete(derivedAsset);
   await db.delete(proofBrandAsset);
   await db.delete(brandKit);
   await db.delete(consent);
   await db.delete(proof);
+  await db.delete(captureRequest); // T7.2 — FKs source + workspace (before both)
   await db.delete(brandAsset);
   await db.delete(membership);
   await db.delete(source);
@@ -343,8 +351,53 @@ async function seed() {
     fonts: { display: "fraunces", body: "hanken" },
   });
 
+  // T7.2 — seeded capture requests for end-to-end testing of /c/[token] (the link
+  // source backs them). Three honest states: OPEN (submittable), EXPIRED, USED. Tokens
+  // are fixed + readable so the demo is easy to walk; reseed wipes them first (no unique
+  // clash). The webhook + Resend send are T7.3; here the dev styleguide/data surface
+  // shows copyable links (C1 = link-only, no QR).
+  const linkSourceId = sourceIdByKind.get("link")!;
+  const HOUR_MS = 60 * 60 * 1000;
+  const CAPTURE_REQUESTS = [
+    {
+      token: "demo-open",
+      customerName: "Maria L.",
+      status: "open" as const,
+      expiresAt: new Date(NOW.getTime() + 72 * HOUR_MS),
+      usedAt: null,
+    },
+    {
+      token: "demo-expired",
+      customerName: "Tom B.",
+      status: "open" as const, // status open but past expiry → resolves "expired" (expires_at>now is authoritative)
+      expiresAt: new Date(NOW.getTime() - 1 * HOUR_MS),
+      usedAt: null,
+    },
+    {
+      token: "demo-used",
+      customerName: "Priya R.",
+      status: "used" as const,
+      expiresAt: new Date(NOW.getTime() + 72 * HOUR_MS),
+      usedAt: new Date(NOW.getTime() - 2 * HOUR_MS),
+    },
+  ];
+  let captureRequestCount = 0;
+  for (const r of CAPTURE_REQUESTS) {
+    await db.insert(captureRequest).values({
+      workspaceId: ws.id,
+      sourceId: linkSourceId,
+      token: r.token,
+      customerName: r.customerName,
+      transactionRef: null,
+      status: r.status,
+      expiresAt: r.expiresAt,
+      usedAt: r.usedAt,
+    });
+    captureRequestCount += 1;
+  }
+
   console.log(
-    `seeded: workspace=1 owner=${ownerEmail} (display "Maya K.") membership=1 sources=${SOURCES.length} proofs=${proofCount} consent=${consentCount} clips=${clipCount} brandAssets=${brandAssetCount} attachments=${attachmentCount} brandKit=1`,
+    `seeded: workspace=1 owner=${ownerEmail} (display "Maya K.") membership=1 sources=${SOURCES.length} proofs=${proofCount} consent=${consentCount} clips=${clipCount} brandAssets=${brandAssetCount} attachments=${attachmentCount} brandKit=1 captureRequests=${captureRequestCount}`,
   );
 }
 
