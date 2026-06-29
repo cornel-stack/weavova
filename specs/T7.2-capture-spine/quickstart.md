@@ -6,17 +6,20 @@ through `/c/[token]` (video + text) + the owner-surface integration check. Run f
 ## Prerequisites
 
 - `.env.local` with `DATABASE_URL` (Neon) + the R2 env (the B2 vars, reused).
-- Migration `0006` generated + applied; seed run.
+- Migrations `0006` (enum + capture_request + verification_basis) **and** `0007` (additive
+  `proof.media_url` for captured video, Increment 2) generated + applied; seed run.
 
 ## 1. Migrate + seed
 
 ```bash
 npm run db:generate     # emits drizzle/0006_*.sql (enum + capture_request + verification_basis)
+                        # + drizzle/0007_*.sql (additive proof.media_url, Increment 2)
 npm run db:migrate      # apply (IPv4-first if needed: node --dns-result-order=ipv4first ...)
 npm run db:seed         # adds a 'link' source + a few capture_requests (open / expired / used)
 ```
 
-**Expected**: `0006` is additive (no existing table changed). Seed prints the seeded request tokens.
+**Expected**: `0006` + `0007` are additive (no existing table/column changed). Seed prints the
+seeded request tokens.
 
 ## 2. Build green
 
@@ -80,7 +83,7 @@ surface it.** Expectation: **0 edits**.
 
 ## Done when
 
-- `0006` applied (additive); seed adds the link source + requests.
+- `0006` + `0007` applied (additive); seed adds the link source + requests.
 - `typecheck` + `lint` + `build` green.
 - Video + text paths each produce a real proof + granted organic consent + a basis stub
   (`transaction_verified_at` null); bytes never hit the app server.

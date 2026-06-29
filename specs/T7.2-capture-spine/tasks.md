@@ -249,21 +249,21 @@ the request is `used`, and the thank-you (06) shows. No verified stamp anywhere.
 
 ## Phase 9: Polish & Definition of Done
 
-- [ ] T022 [P] Port-fidelity + token pass: each built screen (01/02/03/04/05/06/07) matches its named
+- [X] T022 [P] Port-fidelity + token pass: each built screen (01/02/03/04/05/06/07) matches its named
       `Capture/` reference (layout + **verbatim copy**) in **light + dark** at **mobile** widths; persimmon
       scarce; **no verified mark shown**; brand colour themes the page (`contrastOn`). **DoD**: visual parity
       with the refs; divergences (e.g. the name/face control on 04) documented as decisions. **Constitution**:
       P-IV, P-V, P-II.
-- [ ] T023 [P] Port-completeness audit (P-XIII): photo/audio on the prompt + the expired/used blocks are
+- [X] T023 [P] Port-completeness audit (P-XIII): photo/audio on the prompt + the expired/used blocks are
       honest **"coming"/block** states (not dead controls); the **verification basis is an honest stub** (no
       faked verified stamp). **DoD**: 0 dead controls; 0 fabricated stamps. **Constitution**: P-XIII, P-XIV.
-- [ ] T024 [P] Accessibility + states pass: keyboard-operable controls/focus order across the flow;
+- [X] T024 [P] Accessibility + states pass: keyboard-operable controls/focus order across the flow;
       empty/loading/sending/error states present (per the designs + honest upload-retry + empty-text reject).
       **DoD**: keyboard-walkable; all states render.
-- [ ] T025 Code cleanup (TS strict: no `any`, no unjustified `@ts-ignore`); confirm the token-scoped actions
+- [X] T025 Code cleanup (TS strict: no `any`, no unjustified `@ts-ignore`); confirm the token-scoped actions
       never import `getCurrentWorkspace`; no new dependency added (still 11). **DoD**: lint clean; grep
       confirms no `getCurrentWorkspace` in `src/app/c/`.
-- [ ] T026 **Final DoD**: `npm run typecheck && npm run lint && npm run build` green; run the full
+- [X] T026 **Final DoD**: `npm run typecheck && npm run lint && npm run build` green; run the full
       `quickstart.md`. Then **STOP and report**; do not advance to T7.2b/T7.3 until Cornel says so (P-IX).
       **DoD**: all green; quickstart fully passes.
 

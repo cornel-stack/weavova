@@ -1,6 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import {
+  Check,
+  ChevronLeft,
+  Heart,
+  Image as ImageIcon,
+  type LucideIcon,
+  Mic,
+  Pencil,
+  RotateCcw,
+  Video,
+  X,
+} from "lucide-react";
 import { contrastOn, isHexColor } from "@/lib/brand-kit";
 import type { NameDisplay } from "@/lib/consent";
 import {
@@ -16,8 +28,10 @@ import { presignCaptureUpload, submitCapture } from "./actions";
 // only) → presigned-PUT direct to R2 (bytes never transit Vercel) → the SAME atomic send.
 // The recorded clip is reviewed in-page (the customer's own blob); there is NO player on a
 // stored proof — that's the T8 seam in proof-detail. Photo/audio stay "coming" (P-XIII).
-// The page wears the workspace BRAND COLOUR (documented P-IV exception for this brand-owned
-// surface); "powered by Weavova" is the only Weavova mark. No verified stamp.
+// Layout matches the refs: top-left brand mark + back-chevron, bottom-pinned primary CTAs,
+// the full-bleed dark recorder (02), and an AFFIRMATIVE consent checkbox that gates Send
+// (04 — P-VII). The page wears the workspace BRAND COLOUR (documented P-IV exception for
+// this brand-owned surface); "powered by Weavova" is the only Weavova mark. No verified stamp.
 
 type Screen =
   | "prompt"
@@ -63,6 +77,7 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
     request.display.nameDisplay,
   );
   const [showFace, setShowFace] = useState<boolean>(request.display.showFace);
+  const [consented, setConsented] = useState(false); // 04 — affirmative gate (P-VII)
   const [path, setPath] = useState<"text" | "video">("text");
   const [clip, setClip] = useState<{ blob: Blob; url: string } | null>(null);
   const [mediaKey, setMediaKey] = useState<string | null>(null);
@@ -170,161 +185,213 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
     });
   }
 
-  return (
-    <main className="flex min-h-dvh flex-col items-center bg-paper px-6 py-10">
-      <div className="flex w-full max-w-[440px] flex-1 flex-col">
-        <header className="flex justify-center py-4">
-          {request.brand?.logoAssetUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={request.brand.logoAssetUrl}
-              alt={ws}
-              className="h-10 max-w-[180px] object-contain"
-            />
-          ) : (
-            <span
-              className="flex size-10 items-center justify-center rounded-pill font-display text-display-xs"
-              style={primary}
-              aria-hidden
-            >
-              {ws.charAt(0)}
-            </span>
-          )}
-        </header>
+  // ── PORT: 02 _ Recording — full-bleed, outside the paper frame ───────────────
+  if (screen === "record") {
+    return (
+      <RecordScreen
+        primary={primary}
+        onClip={onClipReady}
+        onCancel={() => setScreen("prompt")}
+        onWriteInstead={() => choosePath("text")}
+      />
+    );
+  }
 
-        <div className="flex flex-1 flex-col justify-center py-6">
+  // Top-left back-chevron target (04/07 use it; the chevron replaces the bottom "Back" link).
+  const headerBack =
+    screen === "write"
+      ? () => setScreen("prompt")
+      : screen === "consent"
+        ? () => setScreen(path === "video" ? "review" : "write")
+        : null;
+  const showHeader =
+    screen === "prompt" || screen === "write" || screen === "consent";
+
+  return (
+    <main className="flex min-h-dvh flex-col items-center bg-paper px-6 py-8">
+      <div className="flex w-full max-w-[440px] flex-1 flex-col">
+        {showHeader && (
+          <header className="flex items-center gap-2 py-4">
+            {headerBack && (
+              <button
+                type="button"
+                onClick={headerBack}
+                aria-label="Back"
+                className="-ml-2 flex size-9 items-center justify-center rounded-pill text-ink-2 transition-colors duration-200 ease-pressroom hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+              >
+                <ChevronLeft className="size-5" aria-hidden />
+              </button>
+            )}
+            {request.brand?.logoAssetUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={request.brand.logoAssetUrl}
+                alt={ws}
+                className="h-10 max-w-[160px] object-contain"
+              />
+            ) : (
+              <span
+                className="flex size-10 items-center justify-center rounded-control font-display text-display-xs"
+                style={primary}
+                aria-hidden
+              >
+                {ws.charAt(0)}
+              </span>
+            )}
+          </header>
+        )}
+
+        <div className="flex flex-1 flex-col">
           {/* ── PORT: 01 _ Prompt ───────────────────────────────────────── */}
           {screen === "prompt" && (
-            <section className="text-center">
-              <h1 className="font-display text-display-lg text-ink">
-                {fname ? `How was it, ${fname}?` : `How was it?`}
-              </h1>
-              <p className="mt-3 font-ui text-body text-ink-2">
-                A few honest words is all it takes. Takes about 20 seconds.
-              </p>
-              <div className="mt-8 flex flex-col gap-3">
-                <PromptOption
-                  label="Record a quick video"
-                  wired={request.wiredPaths.includes("video")}
+            <section className="flex flex-1 flex-col text-center">
+              <div className="pt-6">
+                <h1 className="font-display text-display-lg text-ink">
+                  {fname ? `How was it, ${fname}?` : "How was it?"}
+                </h1>
+                <p className="mt-3 font-ui text-body text-ink-2">
+                  A few honest words is all it takes. Takes about 20 seconds.
+                </p>
+              </div>
+              <div className="mt-auto pt-8">
+                <button
+                  type="button"
                   onClick={() => choosePath("video")}
-                  primaryStyle={primary}
-                />
-                <PromptOption
-                  label="Write it"
-                  wired={request.wiredPaths.includes("text")}
-                  onClick={() => choosePath("text")}
-                  primaryStyle={primary}
-                />
-                <PromptOption
-                  label="Add a photo"
-                  wired={request.wiredPaths.includes("photo")}
-                  onClick={() => choosePath("photo")}
-                  primaryStyle={primary}
-                />
-                <PromptOption
-                  label="Record audio"
-                  wired={request.wiredPaths.includes("audio")}
-                  onClick={() => choosePath("audio")}
-                  primaryStyle={primary}
-                />
+                  style={primary}
+                  className="flex w-full items-center justify-center gap-2.5 rounded-control px-5 py-4 font-ui text-body font-medium transition-opacity duration-200 ease-pressroom hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                >
+                  <Video className="size-5" aria-hidden />
+                  Record a quick video
+                </button>
+                {/* the three quiet options; photo/audio carry an honest "soon" (P-XIII) */}
+                <div className="mt-4 grid grid-cols-3 gap-1">
+                  <PromptIconOption
+                    icon={Pencil}
+                    label="Write it"
+                    wired={request.wiredPaths.includes("text")}
+                    onClick={() => choosePath("text")}
+                  />
+                  <PromptIconOption
+                    icon={ImageIcon}
+                    label="Add a photo"
+                    wired={request.wiredPaths.includes("photo")}
+                    onClick={() => choosePath("photo")}
+                  />
+                  <PromptIconOption
+                    icon={Mic}
+                    label="Record audio"
+                    wired={request.wiredPaths.includes("audio")}
+                    onClick={() => choosePath("audio")}
+                  />
+                </div>
               </div>
             </section>
           )}
 
-          {/* ── PORT: 02 _ Recording ────────────────────────────────────── */}
-          {screen === "record" && (
-            <RecordScreen
-              primary={primary}
-              onClip={onClipReady}
-              onCancel={() => setScreen("prompt")}
-              onWriteInstead={() => choosePath("text")}
-            />
-          )}
-
           {/* ── PORT: 03 _ Review ───────────────────────────────────────── */}
           {screen === "review" && clip && (
-            <section>
-              <h1 className="font-display text-display-md text-ink">
-                Looks good?
-              </h1>
-              <p className="mt-2 font-ui text-body-sm text-ink-3">
-                Not sent yet &mdash; you can retake.
-              </p>
+            <section className="flex flex-1 flex-col">
+              <div className="pt-2">
+                <h1 className="font-display text-display-md text-ink">
+                  Looks good?
+                </h1>
+                <p className="mt-2 font-ui text-body-sm text-ink-3">
+                  Not sent yet &mdash; you can retake.
+                </p>
+              </div>
               {/* the customer reviews their OWN just-recorded clip (in-memory) — not a
                   stored-proof player */}
-              <video
-                src={clip.url}
-                controls
-                playsInline
-                className="mt-5 aspect-video w-full rounded-clip bg-ink"
-              />
+              <div className="flex flex-1 items-center py-5">
+                <video
+                  src={clip.url}
+                  data-theme="ink"
+                  controls
+                  playsInline
+                  className="aspect-[3/4] w-full rounded-clip bg-paper object-contain"
+                />
+              </div>
               {error && (
-                <p role="alert" className="mt-3 font-ui text-body-sm text-danger">
+                <p role="alert" className="mb-3 font-ui text-body-sm text-danger">
                   {error}
                 </p>
               )}
-              <button
-                type="button"
-                onClick={useClip}
-                style={primary}
-                className="mt-6 w-full rounded-control px-5 py-3.5 font-ui text-body font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-              >
-                Use this
-              </button>
-              <button
-                type="button"
-                onClick={retake}
-                className="mt-3 w-full rounded-control border border-rule bg-card px-5 py-3 font-ui text-body-sm font-medium text-ink transition-colors duration-200 ease-pressroom hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-              >
-                Retake
-              </button>
+              <div className="mt-auto">
+                <button
+                  type="button"
+                  onClick={useClip}
+                  style={primary}
+                  className="flex w-full items-center justify-center gap-2 rounded-control px-5 py-3.5 font-ui text-body font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                >
+                  Use this
+                  <Check className="size-4" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={retake}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-control border border-rule bg-card px-5 py-3 font-ui text-body-sm font-medium text-ink transition-colors duration-200 ease-pressroom hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                >
+                  <RotateCcw className="size-4" aria-hidden />
+                  Retake
+                </button>
+              </div>
             </section>
           )}
 
           {/* ── PORT: 07 _ Write it ─────────────────────────────────────── */}
           {screen === "write" && (
-            <section>
-              <h1 className="font-display text-display-md text-ink">
+            <section className="flex flex-1 flex-col">
+              <h1 className="pt-2 font-display text-display-md text-ink">
                 In your own words &mdash;
               </h1>
               <textarea
                 autoFocus
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                rows={6}
                 placeholder="What stood out? What would you tell a friend?"
-                className="mt-5 w-full resize-none rounded-clip border border-rule bg-card px-4 py-3 font-display text-quote text-ink placeholder:text-ink-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                className="mt-5 min-h-[160px] w-full flex-1 resize-none rounded-clip border border-rule bg-card px-4 py-3 font-display text-quote text-ink placeholder:text-ink-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
               />
               {error && (
                 <p role="alert" className="mt-3 font-ui text-body-sm text-danger">
                   {error}
                 </p>
               )}
-              <button
-                type="button"
-                disabled={text.trim().length === 0}
-                onClick={() => {
-                  setError(null);
-                  setScreen("consent");
-                }}
-                style={primary}
-                className="mt-6 w-full rounded-control px-5 py-3.5 font-ui text-body font-medium transition-opacity duration-200 ease-pressroom disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-              >
-                Use this
-              </button>
-              <BackLink onClick={() => setScreen("prompt")} />
+              <div className="mt-auto pt-6">
+                <button
+                  type="button"
+                  disabled={text.trim().length === 0}
+                  onClick={() => {
+                    setError(null);
+                    setScreen("consent");
+                  }}
+                  style={primary}
+                  className="flex w-full items-center justify-center gap-2 rounded-control px-5 py-3.5 font-ui text-body font-medium transition-opacity duration-200 ease-pressroom disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                >
+                  Use this
+                  <Check className="size-4" aria-hidden />
+                </button>
+              </div>
             </section>
           )}
 
           {/* ── PORT: 04 _ Consent ──────────────────────────────────────── */}
           {screen === "consent" && (
-            <section>
-              <h1 className="font-display text-display-md text-ink">
+            <section className="flex flex-1 flex-col">
+              <h1 className="pt-2 text-center font-display text-display-md text-ink">
                 One last thing.
               </h1>
-              <p className="mt-4 font-ui text-body text-ink">
-                I&rsquo;m happy for {ws} to share this in their marketing.
-              </p>
+
+              {/* affirmative consent — an UNBUNDLED tick that gates Send (P-VII). */}
+              <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-clip border border-rule bg-card px-4 py-4 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ink">
+                <input
+                  type="checkbox"
+                  className="mt-1 size-5 shrink-0 accent-ink"
+                  checked={consented}
+                  onChange={(e) => setConsented(e.target.checked)}
+                />
+                <span className="font-display text-quote text-ink">
+                  I&rsquo;m happy for {ws} to share this in their marketing.
+                </span>
+              </label>
 
               <fieldset className="mt-6">
                 <legend className="font-ui text-label uppercase tracking-wide text-ink-3">
@@ -403,23 +470,26 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
                 </p>
               )}
 
-              <button
-                type="button"
-                onClick={send}
-                style={primary}
-                className="mt-6 w-full rounded-control px-5 py-3.5 font-ui text-body font-medium transition-opacity duration-200 ease-pressroom focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-              >
-                Send to {ws}
-              </button>
-              <BackLink
-                onClick={() => setScreen(path === "video" ? "review" : "write")}
-              />
+              <div className="mt-auto pt-6">
+                <button
+                  type="button"
+                  onClick={send}
+                  disabled={!consented}
+                  style={primary}
+                  className="w-full rounded-control px-5 py-3.5 font-ui text-body font-medium transition-opacity duration-200 ease-pressroom disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                >
+                  Send to {ws}
+                </button>
+              </div>
             </section>
           )}
 
           {/* ── PORT: 05 _ Sending ──────────────────────────────────────── */}
           {screen === "sending" && (
-            <section className="text-center" aria-live="polite">
+            <section
+              className="flex flex-1 flex-col justify-center text-center"
+              aria-live="polite"
+            >
               <p className="font-display text-display-md text-ink">
                 {pending ? "Sending…" : "Almost there…"}
               </p>
@@ -429,20 +499,26 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
 
           {/* ── PORT: 06 _ Thank-you ────────────────────────────────────── */}
           {screen === "thanks" && (
-            <section className="text-center">
+            <section className="flex flex-1 flex-col justify-center text-center">
+              <span
+                className="mx-auto mb-6 flex size-16 items-center justify-center rounded-pill border"
+                style={{ borderColor: brandColor, color: brandColor }}
+                aria-hidden
+              >
+                <Heart className="size-7" strokeWidth={1.5} />
+              </span>
               <h1 className="font-display text-display-lg text-ink">
                 {fname ? `Thank you, ${fname}.` : "Thank you."}
               </h1>
-              <p className="mt-3 font-ui text-body text-ink-2">
-                Your words mean a lot to us.
+              <p className="mt-4 font-display text-quote italic text-ink-2">
+                Your words mean a lot to us. &mdash; {ws}
               </p>
-              <p className="mt-6 font-display text-display-xs text-ink">&mdash; {ws}</p>
             </section>
           )}
 
           {/* honest "coming" state for photo/audio (P-XIII — not a dead control) */}
           {screen === "coming" && (
-            <section className="text-center">
+            <section className="flex flex-1 flex-col justify-center text-center">
               <h1 className="font-display text-display-md text-ink">Coming soon.</h1>
               <p className="mt-3 font-ui text-body text-ink-2">
                 Photo and audio capture are on the way. For now, record a quick video or
@@ -471,8 +547,11 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
 }
 
 // ── PORT: 02 _ Recording — MediaRecorder on-device + upload fallback ──────────
-// Live camera preview + record/stop. If getUserMedia/MediaRecorder is unavailable or
-// permission is denied, falls back to a file upload (this is also the seam the polished
+// Live camera preview + record/stop, ported as the immersive full-bleed dark screen
+// (X top-left, centered timer pill, the circular record control). The capture LOGIC is
+// unchanged from Increment 2 — getUserMedia/MediaRecorder/stream handling/onstop all as
+// before; only the visual framing changed. If getUserMedia/MediaRecorder is unavailable
+// or permission is denied, falls back to a file upload (also the seam the polished
 // screen-09 "camera blocked" plugs into at T7.2b). Records → review only (No-Editor).
 function RecordScreen({
   primary,
@@ -560,110 +639,141 @@ function RecordScreen({
   if (fallback) {
     // Minimal camera-unavailable fallback (the polished screen-09 is T7.2b).
     return (
-      <section className="text-center">
-        <h1 className="font-display text-display-md text-ink">No camera? No problem.</h1>
-        <p className="mt-3 font-ui text-body text-ink-2">
-          Upload a clip from your gallery, or write a few words instead.
-        </p>
-        <label
-          style={primary}
-          className="mt-7 block w-full cursor-pointer rounded-control px-5 py-3.5 font-ui text-body font-medium focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ink"
-        >
-          Upload from gallery
-          <input
-            type="file"
-            accept="video/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) onClip(file);
-            }}
-          />
-        </label>
-        <button
-          type="button"
-          onClick={onWriteInstead}
-          className="mt-3 w-full rounded-control border border-rule bg-card px-5 py-3 font-ui text-body-sm font-medium text-ink hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-        >
-          Write it instead
-        </button>
-      </section>
+      <main className="flex min-h-dvh flex-col items-center bg-paper px-6 py-8">
+        <div className="flex w-full max-w-[440px] flex-1 flex-col">
+          <header className="flex items-center py-4">
+            <button
+              type="button"
+              onClick={onCancel}
+              aria-label="Back"
+              className="-ml-2 flex size-9 items-center justify-center rounded-pill text-ink-2 transition-colors duration-200 ease-pressroom hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+            >
+              <ChevronLeft className="size-5" aria-hidden />
+            </button>
+          </header>
+          <section className="flex flex-1 flex-col text-center">
+            <div className="pt-6">
+              <h1 className="font-display text-display-md text-ink">
+                No camera? No problem.
+              </h1>
+              <p className="mt-3 font-ui text-body text-ink-2">
+                Upload a clip from your gallery, or write a few words instead.
+              </p>
+            </div>
+            <div className="mt-auto pt-8">
+              <label
+                style={primary}
+                className="block w-full cursor-pointer rounded-control px-5 py-4 text-center font-ui text-body font-medium focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ink"
+              >
+                Upload from gallery
+                <input
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) onClip(file);
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={onWriteInstead}
+                className="mt-3 w-full rounded-control border border-rule bg-card px-5 py-3 font-ui text-body-sm font-medium text-ink hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+              >
+                Write it instead
+              </button>
+            </div>
+          </section>
+          <footer className="py-4 text-center">
+            <span className="font-ui text-label uppercase tracking-wide text-ink-3">
+              powered by Weavova
+            </span>
+          </footer>
+        </div>
+      </main>
     );
   }
 
+  // The recorder is an immersive camera surface — ALWAYS dark in both app themes (like any
+  // phone camera). data-theme="ink" re-scopes the Pressroom tokens to their dark values for
+  // this subtree, so the semantic tokens (paper/card/ink) stay dark even in Daylight.
   return (
-    <section className="text-center">
-      <div className="relative overflow-hidden rounded-clip bg-ink">
-        <video
-          ref={videoRef}
-          autoPlay
-          muted
-          playsInline
-          className="aspect-[3/4] w-full object-cover"
-        />
-        {recording && (
-          <span className="absolute left-3 top-3 flex items-center gap-2 rounded-pill bg-card/90 px-2.5 py-1 font-mono text-mono-sm text-ink">
-            <span className="size-2 rounded-pill bg-danger" aria-hidden />
-            {mmss}
-          </span>
-        )}
-      </div>
-      <p className="mt-4 font-ui text-body-sm text-ink-3">about 20 seconds</p>
-      {!recording ? (
-        <button
-          type="button"
-          onClick={start}
-          style={primary}
-          className="mt-5 w-full rounded-control px-5 py-3.5 font-ui text-body font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-        >
-          Start recording
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={stop}
-          className="mt-5 w-full rounded-control border border-rule bg-card px-5 py-3.5 font-ui text-body font-medium text-ink hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-        >
-          Stop
-        </button>
+    <main data-theme="ink" className="relative flex min-h-dvh flex-col bg-paper">
+      {/* the customer's OWN live camera (allowed) — fills the frame */}
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        className="absolute inset-0 size-full object-cover"
+      />
+      <button
+        type="button"
+        onClick={onCancel}
+        aria-label="Close"
+        className="absolute left-5 top-5 z-10 flex size-10 items-center justify-center rounded-pill bg-card/70 text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+      >
+        <X className="size-5" aria-hidden />
+      </button>
+      {recording && (
+        <span className="absolute left-1/2 top-6 z-10 flex -translate-x-1/2 items-center gap-2 rounded-pill bg-card/70 px-3 py-1 font-mono text-mono-sm text-ink">
+          <span className="size-2 rounded-pill bg-danger" aria-hidden />
+          {mmss}
+        </span>
       )}
-      <BackLink onClick={onCancel} />
-    </section>
+      <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col items-center gap-5 p-8">
+        <span className="rounded-pill bg-card/70 px-3 py-1 font-ui text-body-sm text-ink">
+          about 20 seconds
+        </span>
+        <button
+          type="button"
+          onClick={recording ? stop : start}
+          aria-label={recording ? "Stop recording" : "Start recording"}
+          className="flex size-[72px] items-center justify-center rounded-pill border-4 border-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+        >
+          <span
+            className={
+              recording
+                ? "size-7 rounded-[6px] bg-danger"
+                : "size-14 rounded-pill bg-danger"
+            }
+            aria-hidden
+          />
+        </button>
+      </div>
+    </main>
   );
 }
 
-function PromptOption({
+function PromptIconOption({
+  icon: Icon,
   label,
   wired,
   onClick,
-  primaryStyle,
 }: {
+  icon: LucideIcon;
   label: string;
   wired: boolean;
   onClick: () => void;
-  primaryStyle: { backgroundColor: string; color: string };
 }) {
-  if (wired) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        style={primaryStyle}
-        className="w-full rounded-control px-5 py-3.5 font-ui text-body font-medium transition-opacity duration-200 ease-pressroom hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-      >
-        {label}
-      </button>
-    );
-  }
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center justify-center gap-2 rounded-control border border-hairline bg-card px-5 py-3.5 font-ui text-body text-ink-2 transition-colors duration-200 ease-pressroom hover:border-rule focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+      className="flex items-center gap-2 rounded-control px-2 py-2 text-left transition-colors duration-200 ease-pressroom hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
     >
-      {label}
-      <span className="rounded-pill bg-sunken px-2 py-0.5 font-ui text-label uppercase tracking-wide text-ink-3">
-        soon
+      <Icon
+        className={`size-5 shrink-0 ${wired ? "text-ink-2" : "text-ink-3"}`}
+        aria-hidden
+      />
+      <span className={`font-ui text-body-sm ${wired ? "text-ink-2" : "text-ink-3"}`}>
+        {label}
+        {!wired && (
+          <span className="block font-ui text-label uppercase tracking-wide text-ink-3">
+            soon
+          </span>
+        )}
       </span>
     </button>
   );
@@ -693,17 +803,5 @@ function FullTerms({ workspaceName }: { workspaceName: string }) {
         </p>
       </div>
     </details>
-  );
-}
-
-function BackLink({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="mt-4 w-full text-center font-ui text-body-sm text-ink-3 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-    >
-      Back
-    </button>
   );
 }
