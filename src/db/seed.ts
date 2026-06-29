@@ -8,6 +8,8 @@ import {
   membership,
   proof,
   proofBrandAsset,
+  requestSend,
+  requestTemplate,
   source,
   users,
   verificationBasis,
@@ -176,6 +178,8 @@ async function seed() {
   // (before workspace), then the rest. T6: membership before workspace (it FKs
   // workspace). We do NOT delete `users`/`account`/`session` — real auth identities
   // are preserved across reseeds; only the demo membership is re-pointed below.
+  await db.delete(requestSend); // T7.3 — FKs capture_request + request_template + workspace
+  await db.delete(requestTemplate); // T7.3 — FKs workspace
   await db.delete(verificationBasis); // T7.2 — FKs proof + capture_request
   await db.delete(derivedAsset);
   await db.delete(proofBrandAsset);
@@ -362,6 +366,7 @@ async function seed() {
     {
       token: "demo-open",
       customerName: "Maria L.",
+      customerEmail: "maria@example.com",
       status: "open" as const,
       expiresAt: new Date(NOW.getTime() + 72 * HOUR_MS),
       usedAt: null,
@@ -369,6 +374,7 @@ async function seed() {
     {
       token: "demo-expired",
       customerName: "Tom B.",
+      customerEmail: null,
       status: "open" as const, // status open but past expiry → resolves "expired" (expires_at>now is authoritative)
       expiresAt: new Date(NOW.getTime() - 1 * HOUR_MS),
       usedAt: null,
@@ -376,28 +382,106 @@ async function seed() {
     {
       token: "demo-used",
       customerName: "Priya R.",
+      customerEmail: "priya@example.com",
       status: "used" as const,
       expiresAt: new Date(NOW.getTime() + 72 * HOUR_MS),
       usedAt: new Date(NOW.getTime() - 2 * HOUR_MS),
     },
   ];
-  let captureRequestCount = 0;
+  const requestIdByToken = new Map<string, string>();
   for (const r of CAPTURE_REQUESTS) {
-    await db.insert(captureRequest).values({
+    const [row] = await db
+      .insert(captureRequest)
+      .values({
+        workspaceId: ws.id,
+        sourceId: linkSourceId,
+        token: r.token,
+        customerName: r.customerName,
+        customerEmail: r.customerEmail,
+        transactionRef: null,
+        status: r.status,
+        expiresAt: r.expiresAt,
+        usedAt: r.usedAt,
+      })
+      .returning({ id: captureRequest.id });
+    requestIdByToken.set(r.token, row.id);
+  }
+  const captureRequestCount = CAPTURE_REQUESTS.length;
+
+  // T7.3 — reusable request templates (the builder's "Save template"; ref 05/06). Only the LIVE
+  // `manual_link` trigger is saved this slice (automated triggers are honest "coming"). The grid's
+  // "N sent" is the REAL count of request_send rows below — never a fabricated number (P-XIV).
+  const CONSENT_LINE = `I'm happy for Lumen Candle Co. to share this in their marketing.`;
+  const [tplShowItInUse] = await db
+    .insert(requestTemplate)
+    .values({
       workspaceId: ws.id,
-      sourceId: linkSourceId,
-      token: r.token,
-      customerName: r.customerName,
-      transactionRef: null,
-      status: r.status,
-      expiresAt: r.expiresAt,
-      usedAt: r.usedAt,
+      name: "Show it in use",
+      prompt: "Show it in use",
+      triggerType: "manual_link",
+      deliveryChannel: "email",
+      sendTiming: "On demand",
+      consentLine: CONSENT_LINE,
+      consentVersion: "v2",
+    })
+    .returning({ id: requestTemplate.id });
+  const [tplProblem] = await db
+    .insert(requestTemplate)
+    .values({
+      workspaceId: ws.id,
+      name: "What problem did it solve?",
+      prompt: "What problem did it solve?",
+      triggerType: "manual_link",
+      deliveryChannel: "link",
+      sendTiming: "On demand",
+      consentLine: CONSENT_LINE,
+      consentVersion: "v2",
+    })
+    .returning({ id: requestTemplate.id });
+  const templateCount = 2;
+
+  // T7.3 — a few REAL dispatch rows so the grid shows honest "N sent" counts (small, true numbers).
+  // Each references a seeded capture_request + its template; statuses mirror the honest states.
+  const SENDS = [
+    {
+      token: "demo-used",
+      templateId: tplShowItInUse.id,
+      channel: "email" as const,
+      recipientEmail: "priya@example.com",
+      deliveryStatus: "accepted" as const,
+    },
+    {
+      token: "demo-open",
+      templateId: tplShowItInUse.id,
+      channel: "email" as const,
+      recipientEmail: "maria@example.com",
+      deliveryStatus: "accepted" as const,
+    },
+    {
+      token: "demo-expired",
+      templateId: tplProblem.id,
+      channel: "link" as const,
+      recipientEmail: null,
+      deliveryStatus: "link_generated" as const,
+    },
+  ];
+  let requestSendCount = 0;
+  for (const s of SENDS) {
+    const requestId = requestIdByToken.get(s.token);
+    if (!requestId) continue;
+    await db.insert(requestSend).values({
+      requestId,
+      templateId: s.templateId,
+      workspaceId: ws.id,
+      channel: s.channel,
+      recipientEmail: s.recipientEmail,
+      deliveryStatus: s.deliveryStatus,
     });
-    captureRequestCount += 1;
+    requestSendCount += 1;
   }
 
   console.log(
-    `seeded: workspace=1 owner=${ownerEmail} (display "Maya K.") membership=1 sources=${SOURCES.length} proofs=${proofCount} consent=${consentCount} clips=${clipCount} brandAssets=${brandAssetCount} attachments=${attachmentCount} brandKit=1 captureRequests=${captureRequestCount}`,
+    `seeded: workspace=1 owner=${ownerEmail} (display "Maya K.") membership=1 sources=${SOURCES.length} proofs=${proofCount} consent=${consentCount} clips=${clipCount} brandAssets=${brandAssetCount} attachments=${attachmentCount} brandKit=1 captureRequests=${captureRequestCount} requestTemplates=${templateCount} requestSends=${requestSendCount}`,
   );
 }
 

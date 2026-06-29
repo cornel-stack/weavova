@@ -23,6 +23,37 @@ export const REQUEST_TRIGGERS: TriggerOption[] = [
   { value: "calendly", label: "Calendly", wired: false },
 ];
 
+// The preset prompts the builder (06) offers; selecting one names the template + sets its prompt.
+export const PROMPT_SET_OPTIONS = [
+  "Show it in use",
+  "Before & after",
+  "What problem did it solve?",
+  "How was the service?",
+] as const;
+
+// The consent line the builder pre-fills + the version it carries into capture (ref 06: "v2").
+export const DEFAULT_CONSENT_VERSION = "v2";
+export function defaultConsentLine(workspaceName: string): string {
+  return `I'm happy for ${workspaceName} to share this in their marketing.`;
+}
+
+// A card on the Collection-requests grid (ref 05). `sentCount` is a REAL count of request_send
+// rows for the template (P-XIV) — never a fabricated number.
+export interface TemplateCardView {
+  id: string;
+  name: string;
+  prompt: string;
+  triggerType: RequestTrigger;
+  deliveryChannel: RequestChannel;
+  sendTiming: string | null;
+  sentCount: number;
+}
+
+// The grid footer's trigger label (e.g. "Manual link"). Mirrors REQUEST_TRIGGERS labels.
+export function triggerLabel(t: RequestTrigger): string {
+  return REQUEST_TRIGGERS.find((x) => x.value === t)?.label ?? t;
+}
+
 // The Ask-for-more modal (ref 23) view: pre-addressed to a proof's customer. No customer email
 // is stored anywhere (free-email entry, C7) → there is no address to pre-fill; the name fills the
 // card only. `sourceLabel` is honest provenance (e.g. "Capture link" / "Shopify") — never a
@@ -64,3 +95,17 @@ export type CreateAndSendResult =
 export function looksLikeEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
+
+// Shapes for the saveTemplate server action (builder, ref 06).
+export interface SaveTemplateInput {
+  name: string;
+  prompt: string;
+  triggerType: RequestTrigger;
+  deliveryChannel: RequestChannel;
+  sendTiming?: string | null;
+  consentLine: string;
+  consentVersion: string;
+}
+export type SaveTemplateResult =
+  | { status: "ok"; templateId: string }
+  | { status: "invalid"; reason: string };

@@ -10,6 +10,7 @@ import {
   proof,
   proofBrandAsset,
   requestSend,
+  requestTemplate,
   source,
   verificationBasis,
   workspace,
@@ -48,6 +49,11 @@ import {
 } from "@/lib/capture";
 import type { ProofType } from "@/lib/proof";
 import type { BrandKitFonts, BrandKitView } from "@/lib/brand-kit";
+import type {
+  RequestChannel,
+  RequestTrigger,
+  TemplateCardView,
+} from "@/lib/requests";
 
 export type Workspace = typeof workspace.$inferSelect;
 
@@ -1364,6 +1370,69 @@ export async function recordSend(input: {
     deliveryStatus: input.deliveryStatus,
     providerId: input.providerId ?? null,
   });
+}
+
+// T7.3 (US2, ref 05) — the workspace's saved request templates with a REAL "N sent" aggregate
+// (count of request_send rows referencing each template; P-XIV — never a fabricated number).
+// Workspace-scoped (two-layer with the middleware gate). Newest first.
+export async function listRequestTemplates(
+  workspaceId: string,
+): Promise<TemplateCardView[]> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        id: requestTemplate.id,
+        name: requestTemplate.name,
+        prompt: requestTemplate.prompt,
+        triggerType: requestTemplate.triggerType,
+        deliveryChannel: requestTemplate.deliveryChannel,
+        sendTiming: requestTemplate.sendTiming,
+        sentCount: sql<number>`count(${requestSend.id})`.mapWith(Number),
+      })
+      .from(requestTemplate)
+      .leftJoin(requestSend, eq(requestSend.templateId, requestTemplate.id))
+      .where(eq(requestTemplate.workspaceId, workspaceId))
+      .groupBy(requestTemplate.id)
+      .orderBy(desc(requestTemplate.createdAt));
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      prompt: r.prompt,
+      triggerType: r.triggerType as RequestTrigger,
+      deliveryChannel: r.deliveryChannel as RequestChannel,
+      sendTiming: r.sendTiming,
+      sentCount: r.sentCount,
+    }));
+  });
+}
+
+// T7.3 (US3, ref 06) — persist a reusable request template (the builder's "Save template").
+// Workspace-scoped. The action layer enforces that only `manual_link` is saved this slice
+// (automated triggers are honest "coming" — D5); this writer is trigger-agnostic.
+export async function insertRequestTemplate(input: {
+  workspaceId: string;
+  name: string;
+  prompt: string;
+  triggerType: RequestTrigger;
+  deliveryChannel: RequestChannel;
+  sendTiming?: string | null;
+  consentLine: string;
+  consentVersion: string;
+}): Promise<{ id: string }> {
+  const [row] = await getDb()
+    .insert(requestTemplate)
+    .values({
+      workspaceId: input.workspaceId,
+      name: input.name,
+      prompt: input.prompt,
+      triggerType: input.triggerType,
+      deliveryChannel: input.deliveryChannel,
+      sendTiming: input.sendTiming ?? null,
+      consentLine: input.consentLine,
+      consentVersion: input.consentVersion,
+    })
+    .returning({ id: requestTemplate.id });
+  return { id: row.id };
 }
 
 // PUBLIC token resolution (T007) — token → request → workspace → brand. Returns a

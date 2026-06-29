@@ -1,10 +1,12 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import {
   createCaptureRequest,
   getBrandKit,
   getLinkSourceId,
+  insertRequestTemplate,
   recordSend,
 } from "@/db/queries";
 import { getCurrentWorkspace } from "@/lib/session";
@@ -12,6 +14,8 @@ import { sendCaptureRequestEmail } from "@/lib/resend";
 import {
   type CreateAndSendInput,
   type CreateAndSendResult,
+  type SaveTemplateInput,
+  type SaveTemplateResult,
   looksLikeEmail,
 } from "@/lib/requests";
 
@@ -112,4 +116,42 @@ export async function createAndSendRequest(
     deliveryStatus: "failed",
   });
   return { status: "sent_failed", captureUrl };
+}
+
+// saveTemplate (US3, ref 06) — persist a reusable request template for the current workspace.
+// Only `manual_link` is wired this slice; automated triggers are honest "coming" states in the
+// builder and are REJECTED here so they can never persist as if wired (D5 / P-XIII). Saving a
+// template fires nothing — the automation bridge is deferred.
+export async function saveTemplate(
+  input: SaveTemplateInput,
+): Promise<SaveTemplateResult> {
+  const name = input.name.trim();
+  const prompt = input.prompt.trim();
+  const consentLine = input.consentLine.trim();
+  if (!name || !prompt) {
+    return { status: "invalid", reason: "Pick a prompt for the request." };
+  }
+  if (!consentLine) {
+    return { status: "invalid", reason: "The consent line can't be empty." };
+  }
+  if (input.triggerType !== "manual_link") {
+    return {
+      status: "invalid",
+      reason: "Automatic triggers are coming soon — save a Manual link template for now.",
+    };
+  }
+
+  const ws = await getCurrentWorkspace();
+  const { id } = await insertRequestTemplate({
+    workspaceId: ws.id,
+    name,
+    prompt,
+    triggerType: "manual_link",
+    deliveryChannel: input.deliveryChannel,
+    sendTiming: input.sendTiming ?? null,
+    consentLine,
+    consentVersion: input.consentVersion,
+  });
+  revalidatePath("/app/requests");
+  return { status: "ok", templateId: id };
 }

@@ -112,18 +112,18 @@ is written; Link yields a copyable `/c/[token]` URL that opens the T7.2 page ide
 **Independent test**: Navigate to `/app/requests` → only this workspace's templates render with real
 `N sent` counts; empty/loading states render; "+ New request" → `/app/requests/new`.
 
-- [ ] T010 [US2] Add `listRequestTemplates()` to `src/db/queries.ts` — workspace-scoped read returning
+- [X] T010 [US2] Add `listRequestTemplates()` to `src/db/queries.ts` — workspace-scoped read returning
       `TemplateCardView[]`; **`sentCount` = `count(request_send WHERE template_id = id)`** (real owned
       data, D6). **DoD**: scoped to the current workspace; count is a live aggregate, not stored/faked.
       **Constitution**: P-XIV, P-V (two-layer scoping).
-- [ ] T011 [US2] Create `src/app/app/requests/page.tsx` (server, ws-scoped via `getCurrentWorkspace`) +
+- [X] T011 [US2] Create `src/app/app/requests/page.tsx` (server, ws-scoped via `getCurrentWorkspace`) +
       `src/app/app/requests/requests-grid.tsx` — **binding ref `The Workspace/05 _ Collection requests
       _app_requests.png`**: top bar "Collection requests" + ⌘K + persimmon "+ New request" →
       `/app/requests/new`; "SAVED TEMPLATES" card grid (name, delivery chip Email/Link, prompt quote,
       footer trigger label + `N sent`). **Layout-faithful first pass**, light + dark. The Requests nav
       route simply becomes live — **no `src/lib/nav.ts` edit** (already points here). **DoD**: renders
       seeded templates; only current workspace's; matches ref 05. **Constitution**: P-V, P-XIV.
-- [ ] T012 [US2] Empty / loading / error states for `/app/requests` (no templates → honest "create your
+- [X] T012 [US2] Empty / loading / error states for `/app/requests` (no templates → honest "create your
       first request" invite, no fake rows; skeleton consistent with other `/app` lists; error).
       **DoD**: all three states render; no fabricated sample data. **Constitution**: P-XIII, P-XIV.
 
@@ -137,11 +137,11 @@ honest-coming; live "CUSTOMER SEES" preview.
 grid; Manual-link create → a copyable `/c/[token]` URL (or emailed); Shopify/Stripe/Calendly visibly
 non-wired "coming".
 
-- [ ] T013 [US3] Add `saveTemplate(input)` to `src/app/app/requests/actions.ts` (ws-scoped) per the
+- [X] T013 [US3] Add `saveTemplate(input)` to `src/app/app/requests/actions.ts` (ws-scoped) per the
       contract: insert a `request_template`; **reject any `triggerType` other than `manual_link`**
       (`invalid`); `revalidatePath('/app/requests')`. **DoD**: persists ws-scoped; automated triggers
       never persist as wired. **Constitution**: P-XIII (D5), P-V.
-- [ ] T014 [US3] Create `src/app/app/requests/new/page.tsx` (server, ws-scoped) +
+- [X] T014 [US3] Create `src/app/app/requests/new/page.tsx` (server, ws-scoped) +
       `src/app/app/requests/request-builder.tsx` (client) — **binding ref `The Workspace/06 _ Request
       builder _app_requests_new.png`**: "← Requests" breadcrumb, "New request", persimmon "Save
       template"; TRIGGER row (**Manual link selectable/live**; Shopify/Stripe/Calendly **honest
@@ -149,11 +149,11 @@ non-wired "coming".
       PROMPT SET chips; Delivery channel; Send timing field; versioned Consent line textarea.
       **Layout-faithful first pass**, light + dark. **DoD**: matches ref 06; Save → `saveTemplate`.
       **Constitution**: P-V, P-XIII.
-- [ ] T015 [US3] Build the "CUSTOMER SEES" preview panel in `request-builder.tsx` — a presentational
+- [X] T015 [US3] Build the "CUSTOMER SEES" preview panel in `request-builder.tsx` — a presentational
       phone frame rendering the capture prompt + chosen prompt + consent line (reuses capture-prompt
       styling, **not** the live capture component; public page untouched). **DoD**: preview updates with
       the prompt/consent inputs; customer is the headline. **Constitution**: P-II, P-V.
-- [ ] T016 [US3] Wire the Manual-link **create** action in the builder → `createAndSendRequest({
+- [X] T016 [US3] Wire the Manual-link **create** action in the builder → `createAndSendRequest({
       channel, recipientEmail?, templateId })` → show the copyable `/c/[token]` URL (Link) or the
       sent/honest-failure state (Email). **DoD**: created request carries `templateId` (feeds `N sent`);
       reuses the US1 action (no duplicate send path). **Constitution**: P-XIV, P-V.
@@ -166,7 +166,7 @@ non-wired "coming".
 **Independent test**: After sending + capturing one, each request reflects its true state; no
 opens/clicks anywhere.
 
-- [ ] T017 [US4] Surface honest request status where the designs show it (the template grid footer
+- [X] T017 [US4] Surface honest request status where the designs show it (the template grid footer
       and/or a per-template request view): **created / sent / accepted-for-delivery / used / expired**
       derived from `capture_request.status` + `expires_at` + the `request_send.deliveryStatus`; **never**
       opens/clicks. **DoD**: each state maps to stored data per `request-actions.md` honest-state matrix;
@@ -176,19 +176,19 @@ opens/clicks anywhere.
 
 ## Phase 7: Polish & Cross-Cutting
 
-- [ ] T018 [P] Extend `src/db/seed.ts` (additive): seed a few `request_template` rows for the demo
+- [X] T018 [P] Extend `src/db/seed.ts` (additive): seed a few `request_template` rows for the demo
       workspace (one `manual_link`, others showing `shopify`/`shared on demand` per ref 05 spirit) + a
       small **real** number of `request_send` rows per template (honest `N sent`, D6) + at least one
       manual `capture_request` (with `customer_email`) for the e2e walk; optionally set `customer_email`
       on a couple of existing seeded requests. **DoD**: seed runs; grid shows honest non-zero counts; no
       change to existing proof/consent/clip fixtures. **Constitution**: P-XIV, P-VI.
-- [ ] T019 INTEGRATION VERIFY (quickstart §8, P-V): take a `/c/[token]` URL from a merchant-created
+- [X] T019 INTEGRATION VERIFY (quickstart §8, P-V): take a `/c/[token]` URL from a merchant-created
       request (T016 or T006) and confirm it renders the T7.2 capture page **identically to a seeded
       request**; **grep that `src/app/c/[token]/**` has ZERO edits this slice** and that no
       `capture_request` token column changed. **DoD**: public page byte-unchanged; merchant + seeded
       requests resolve identically. **If the public page needed any edit → STOP and surface (P-V
       violation), do not implement.** **Constitution**: P-V.
-- [ ] T020 Final DoD + quickstart walk: `npm run typecheck && npm run lint && npm run build` green;
+- [X] T020 Final DoD + quickstart walk: `npm run typecheck && npm run lint && npm run build` green;
       walk `quickstart.md` §3–§7 (05 grid, 06 builder, 23 modal incl. Resend failure, brand-framed
       email, honest tracking) in light + dark with empty/loading/error/sent states; confirm **no new
       dependency (still 11)**, **token model unchanged**, **no QR/opens/clicks**. Live email send + DB
