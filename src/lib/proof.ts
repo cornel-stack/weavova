@@ -43,4 +43,7 @@ export interface ProofDetailView extends ProofView {
   consentVersion: number | null;
   /** ISO effective-consent date; null when none applies */
   consentAt: string | null;
+  /** T7.2 — captured source-media R2 key; null for text + every existing fixture.
+   *  Drives the non-playing "media stored · playback at T8" seam (NOT a player). */
+  mediaUrl: string | null;
 }

@@ -246,11 +246,15 @@ const detailColumns = {
   ...proofColumns,
   consentVersion: latestConsentVersion,
   consentEffectiveAt: latestConsentEffectiveAt,
+  // T7.2 — detail-only: the captured media key (null for text + fixtures). Added ONLY to
+  // the detail projection; proofColumns/getProofs/ProofView stay byte-unchanged.
+  mediaUrl: proof.mediaUrl,
 };
 
 type ProofDetailRow = ProofRow & {
   consentVersion: number | string | null;
   consentEffectiveAt: Date | string | null;
+  mediaUrl: string | null;
 };
 
 function toDetailView(row: ProofDetailRow): ProofDetailView {
@@ -262,6 +266,7 @@ function toDetailView(row: ProofDetailRow): ProofDetailView {
       row.consentEffectiveAt == null
         ? null
         : new Date(row.consentEffectiveAt).toISOString(),
+    mediaUrl: row.mediaUrl ?? null,
   };
 }
 
@@ -1389,6 +1394,31 @@ export async function getWorkspaceDisplayDefault(
   });
 }
 
+// NON-consuming resolution of an OPEN token's workspace + source (T7.2 — presign needs
+// this BEFORE the send consumes the token). Returns null for used/expired/unknown. The
+// authoritative check is `status='open' AND expires_at > now()`. Token-scoped (no session).
+export async function getOpenCaptureContext(
+  token: string,
+): Promise<{ workspaceId: string; sourceId: string } | null> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        workspaceId: captureRequest.workspaceId,
+        sourceId: captureRequest.sourceId,
+      })
+      .from(captureRequest)
+      .where(
+        and(
+          eq(captureRequest.token, token),
+          eq(captureRequest.status, "open"),
+          gt(captureRequest.expiresAt, new Date()),
+        ),
+      )
+      .limit(1);
+    return rows[0] ?? null;
+  });
+}
+
 // The ATOMIC single-use guard (T008) — one conditional UPDATE. Flips open→used iff the
 // token is currently open AND unexpired, returning the request context; else null. This
 // is the concurrency control (like the (proofId,version) unique guard): a second submit
@@ -1435,6 +1465,7 @@ export async function writeCapturedProof(input: {
   proofType: ProofType;
   quote: string | null;
   transcript: string | null;
+  mediaUrl: string | null; // T7.2 — captured source-media R2 key (video); null for text
   display: { nameDisplay: NameDisplay; showFace: boolean };
 }): Promise<{ proofId: string }> {
   const proofId = crypto.randomUUID();
@@ -1454,7 +1485,8 @@ export async function writeCapturedProof(input: {
       capturedAt: now,
       reviewed: false,
       verified: false, // NO stamp — the transaction leg is a stub (T7.5)
-      thumbnail: null,
+      thumbnail: null, // poster is T8; the captured media key lives in mediaUrl
+      mediaUrl: input.mediaUrl,
     }),
     getDb().insert(consent).values({
       id: consentId,

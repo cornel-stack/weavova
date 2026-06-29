@@ -50,6 +50,13 @@
       "when": 1782716459834,
       "tag": "0006_salty_lady_bullseye",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782719872954,
+      "tag": "0007_legal_lightspeed",
+      "breakpoints": true
     }
   ]
 }

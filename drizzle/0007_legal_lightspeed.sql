@@ -1,0 +1,1 @@
+ALTER TABLE "proof" ADD COLUMN "media_url" text;

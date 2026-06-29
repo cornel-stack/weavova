@@ -107,6 +107,12 @@ export const proof = pgTable("proof", {
   reviewed: boolean("reviewed").notNull().default(false),
   verified: boolean("verified").notNull().default(false),
   thumbnail: text("thumbnail"),
+  // T7.2 — the captured SOURCE-media R2 key (video this slice; audio/photo later).
+  // NULLABLE: text proof + every existing fixture is null and behaves exactly as before.
+  // DISTINCT from `thumbnail` (a poster image, T8). The real media is KEPT here; PLAYBACK
+  // is the T8 render-engine's job (it reads mediaUrl) — pre-T8 a media proof renders through
+  // the existing non-playing "media stored · playback coming" seam, never a <video>/<img>.
+  mediaUrl: text("media_url"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

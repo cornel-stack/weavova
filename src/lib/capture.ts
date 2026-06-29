@@ -10,15 +10,11 @@ import type { NameDisplay } from "@/lib/consent";
 // (P-XIII) — visible on the prompt, never dead controls, routed to a coming view.
 export type CaptureProofPath = "video" | "text" | "photo" | "audio";
 
-// Increment 1 wires TEXT end-to-end; VIDEO is Increment 2; PHOTO/AUDIO are T7.2b.
-// (The prompt still shows all four — faithful to screen 01 — with the unwired ones
-// rendering a "coming" state.)
-export const CAPTURE_WIRED_PATHS: CaptureProofPath[] = ["text"];
-export const CAPTURE_COMING_PATHS: CaptureProofPath[] = [
-  "video",
-  "photo",
-  "audio",
-];
+// Increment 1 wired TEXT; Increment 2 wires VIDEO (MediaRecorder + upload fallback).
+// PHOTO/AUDIO remain honest "coming" states (T7.2b). The prompt shows all four — faithful
+// to screen 01 — with the unwired ones rendering a "coming" state (P-XIII).
+export const CAPTURE_WIRED_PATHS: CaptureProofPath[] = ["text", "video"];
+export const CAPTURE_COMING_PATHS: CaptureProofPath[] = ["photo", "audio"];
 
 // Per-request token expiry (Q1 = 72h). Config-overridable via env at creation time.
 export const CAPTURE_TOKEN_TTL_HOURS = 72;

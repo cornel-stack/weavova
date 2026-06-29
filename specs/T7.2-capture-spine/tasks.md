@@ -153,13 +153,13 @@ to R2 (network tab) and a media key is held in flow state for the consent step.
       **photo/audio render an honest "coming" state** (P-XIII), not dead. Mobile-first, light+dark, verbatim
       copy. **DoD**: matches screen 01; photo/audio are visible honest coming-states. **Constitution**: P-V,
       P-XIII, P-XVII.
-- [ ] T014 [US1] Add `presignCaptureUpload` to `src/app/c/[token]/actions.ts` (token-scoped Server Action):
+- [x] T014 [US1] Add `presignCaptureUpload` to `src/app/c/[token]/actions.ts` (token-scoped Server Action):
       validate the token is open+unexpired (a READ), validate content type (`CAPTURE_ALLOWED_VIDEO_TYPES`) +
       size (`CAPTURE_MAX_BYTES`), resolve workspace from the request, sign an R2 PUT URL via
       `captureMediaKey` + `presignPut`. Returns `{uploadUrl, key}` | invalid | expired/used/not_found |
       error. **NO `getCurrentWorkspace`.** **DoD**: `typecheck` green; returns a signed URL for a valid
       token, honest rejects otherwise. **Constitution**: P-VII (token-scoped), P-XIV.
-- [ ] T015 [US1] Port the **recording (02)** + **review (03)** screens (`screens/record.tsx`,
+- [x] T015 [US1] Port the **recording (02)** + **review (03)** screens (`screens/record.tsx`,
       `screens/review.tsx`): MediaRecorder capture (getUserMedia → record → Blob), timer/"~20 seconds" per
       02; review per 03 ("Looks good? Not sent yet — you can retake." Use this / Retake) — **record→review
       only, NO edit** (P-VIII). On "Use this": `fetch(uploadUrl,{method:'PUT',body:blob})` (bytes direct to

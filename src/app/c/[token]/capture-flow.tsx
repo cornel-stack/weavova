@@ -1,24 +1,34 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { contrastOn, isHexColor } from "@/lib/brand-kit";
 import type { NameDisplay } from "@/lib/consent";
-import type { CaptureProofPath, CaptureRequestView } from "@/lib/capture";
-import { submitCapture } from "./actions";
+import {
+  CAPTURE_ALLOWED_VIDEO_TYPES,
+  type CaptureProofPath,
+  type CaptureRequestView,
+} from "@/lib/capture";
+import { presignCaptureUpload, submitCapture } from "./actions";
 
 // The public capture flow (T7.2 — a faithful PORT of design-reference/Weavova/Capture/).
-// Client state machine. Increment 1 wires the TEXT path (prompt 01 → write 07 → consent
-// 04 → sending 05 → thanks 06); VIDEO/photo/audio are honest "coming" states (P-XIII) —
-// video lands in Increment 2. The customer's words are stored verbatim (testimony-
-// verbatim); consent is a real T7.1 granted version (organic-only) written server-side.
-// The page wears the workspace BRAND COLOUR (the documented P-IV exception for this
-// brand-owned surface — persimmon is Weavova chrome; here the merchant's colour leads the
-// primary action; "powered by Weavova" is the only Weavova mark). No verified stamp.
+// Client state machine. Wires TEXT (01→07→04→05→06) and VIDEO (01→02→03→04→05→06).
+// VIDEO: MediaRecorder records on-device → review (retake/use; No-Editor — record→review
+// only) → presigned-PUT direct to R2 (bytes never transit Vercel) → the SAME atomic send.
+// The recorded clip is reviewed in-page (the customer's own blob); there is NO player on a
+// stored proof — that's the T8 seam in proof-detail. Photo/audio stay "coming" (P-XIII).
+// The page wears the workspace BRAND COLOUR (documented P-IV exception for this brand-owned
+// surface); "powered by Weavova" is the only Weavova mark. No verified stamp.
 
-type Screen = "prompt" | "write" | "consent" | "sending" | "thanks" | "coming";
+type Screen =
+  | "prompt"
+  | "record"
+  | "review"
+  | "write"
+  | "consent"
+  | "sending"
+  | "thanks"
+  | "coming";
 
-// privacy rank — higher = more private (mirrors resolveDisplay; the customer may only
-// pick a name option at-or-more-private than the workspace default).
 const NAME_RANK: Record<NameDisplay, number> = {
   full: 0,
   first_initial: 1,
@@ -30,6 +40,17 @@ const NAME_OPTIONS: { value: NameDisplay; label: string }[] = [
   { value: "anonymous", label: "Keep me anonymous" },
 ];
 
+// Pick a MediaRecorder mime the browser supports; normalise (strip codecs) for signing.
+function pickVideoType(): string | null {
+  if (typeof MediaRecorder === "undefined") return null;
+  for (const t of CAPTURE_ALLOWED_VIDEO_TYPES) {
+    if (MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return null;
+}
+function baseType(mime: string): string {
+  return mime.split(";")[0];
+}
 function firstName(name: string | null): string | null {
   if (!name) return null;
   return name.trim().split(/\s+/)[0] || null;
@@ -41,23 +62,83 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
   const [nameDisplay, setNameDisplay] = useState<NameDisplay>(
     request.display.nameDisplay,
   );
+  const [showFace, setShowFace] = useState<boolean>(request.display.showFace);
+  const [path, setPath] = useState<"text" | "video">("text");
+  const [clip, setClip] = useState<{ blob: Blob; url: string } | null>(null);
+  const [mediaKey, setMediaKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const brandColor = isHexColor(request.brand?.brandColor ?? "")
     ? request.brand!.brandColor
-    : "#1C1714"; // honest fallback = ink (no fabricated colour)
+    : "#1C1714";
   const onBrand = contrastOn(brandColor);
   const fname = firstName(request.customerName);
   const ws = request.workspaceName;
-
-  // The brand-coloured primary button style (the documented P-IV exception, above).
   const primary = { backgroundColor: brandColor, color: onBrand } as const;
 
-  function choosePath(path: CaptureProofPath) {
+  function choosePath(p: CaptureProofPath) {
     setError(null);
-    if (path === "text") setScreen("write");
-    else setScreen("coming"); // video/photo/audio — honest coming (Increment 2 / T7.2b)
+    if (p === "text") {
+      setPath("text");
+      setScreen("write");
+    } else if (p === "video") {
+      setPath("video");
+      setScreen("record");
+    } else {
+      setScreen("coming"); // photo/audio — honest coming (T7.2b)
+    }
+  }
+
+  function onClipReady(blob: Blob) {
+    setClip({ blob, url: URL.createObjectURL(blob) });
+    setScreen("review");
+  }
+  function retake() {
+    if (clip) URL.revokeObjectURL(clip.url);
+    setClip(null);
+    setMediaKey(null);
+    setScreen("record");
+  }
+
+  // Upload the reviewed clip to R2 (presign → PUT), then advance to consent.
+  function useClip() {
+    if (!clip) return;
+    setError(null);
+    setScreen("sending"); // brief "uploading" via the sending seam
+    startTransition(async () => {
+      const contentType = baseType(clip.blob.type) || "video/webm";
+      const signed = await presignCaptureUpload({
+        token: request.token,
+        contentType,
+        sizeBytes: clip.blob.size,
+      });
+      if (signed.status !== "ok") {
+        setError(
+          signed.status === "invalid"
+            ? signed.reason
+            : signed.status === "closed"
+              ? `This link is no longer open. Ask ${ws} for a new one.`
+              : "Upload failed. Try again.",
+        );
+        setScreen("review");
+        return;
+      }
+      try {
+        const put = await fetch(signed.uploadUrl, {
+          method: "PUT",
+          body: clip.blob,
+          headers: { "content-type": contentType },
+        });
+        if (!put.ok) throw new Error("PUT failed");
+      } catch {
+        setError("Upload failed. Check your connection and try again.");
+        setScreen("review");
+        return;
+      }
+      setMediaKey(signed.key);
+      setScreen("consent");
+    });
   }
 
   function send() {
@@ -66,25 +147,25 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
     startTransition(async () => {
       const res = await submitCapture({
         token: request.token,
-        path: "text",
-        text,
-        // text proof carries no face → send only the name override (more-private-only;
-        // the server clamps via resolveDisplay against the workspace floor).
-        displayOverride: { nameDisplay },
+        path,
+        text: path === "text" ? text : undefined,
+        mediaKey: path === "video" ? (mediaKey ?? undefined) : undefined,
+        // video has a face → send name + face; text → name only (no face).
+        displayOverride:
+          path === "video" ? { nameDisplay, showFace } : { nameDisplay },
       });
       if (res.status === "ok") {
         setScreen("thanks");
       } else if (res.status === "invalid") {
         setError(res.reason);
-        setScreen("write");
+        setScreen(path === "video" ? "consent" : "write");
       } else {
-        // used / expired / not_found / error — honest message; the link is spent.
         setError(
           res.status === "error"
             ? `We couldn't save that just now. Ask ${ws} for a fresh link.`
             : `This link is no longer open. Ask ${ws} for a new one.`,
         );
-        setScreen("write");
+        setScreen(path === "video" ? "consent" : "write");
       }
     });
   }
@@ -92,7 +173,6 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
   return (
     <main className="flex min-h-dvh flex-col items-center bg-paper px-6 py-10">
       <div className="flex w-full max-w-[440px] flex-1 flex-col">
-        {/* brand mark — real logo or an honest monogram in the brand colour */}
         <header className="flex justify-center py-4">
           {request.brand?.logoAssetUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -151,11 +231,61 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
             </section>
           )}
 
+          {/* ── PORT: 02 _ Recording ────────────────────────────────────── */}
+          {screen === "record" && (
+            <RecordScreen
+              primary={primary}
+              onClip={onClipReady}
+              onCancel={() => setScreen("prompt")}
+              onWriteInstead={() => choosePath("text")}
+            />
+          )}
+
+          {/* ── PORT: 03 _ Review ───────────────────────────────────────── */}
+          {screen === "review" && clip && (
+            <section>
+              <h1 className="font-display text-display-md text-ink">
+                Looks good?
+              </h1>
+              <p className="mt-2 font-ui text-body-sm text-ink-3">
+                Not sent yet &mdash; you can retake.
+              </p>
+              {/* the customer reviews their OWN just-recorded clip (in-memory) — not a
+                  stored-proof player */}
+              <video
+                src={clip.url}
+                controls
+                playsInline
+                className="mt-5 aspect-video w-full rounded-clip bg-ink"
+              />
+              {error && (
+                <p role="alert" className="mt-3 font-ui text-body-sm text-danger">
+                  {error}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={useClip}
+                style={primary}
+                className="mt-6 w-full rounded-control px-5 py-3.5 font-ui text-body font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+              >
+                Use this
+              </button>
+              <button
+                type="button"
+                onClick={retake}
+                className="mt-3 w-full rounded-control border border-rule bg-card px-5 py-3 font-ui text-body-sm font-medium text-ink transition-colors duration-200 ease-pressroom hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+              >
+                Retake
+              </button>
+            </section>
+          )}
+
           {/* ── PORT: 07 _ Write it ─────────────────────────────────────── */}
           {screen === "write" && (
             <section>
               <h1 className="font-display text-display-md text-ink">
-                In your own words —
+                In your own words &mdash;
               </h1>
               <textarea
                 autoFocus
@@ -196,10 +326,6 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
                 I&rsquo;m happy for {ws} to share this in their marketing.
               </p>
 
-              {/* How you'll appear — pre-filled from the workspace default; the customer
-                  may only move toward MORE privacy (less-private options disabled). For a
-                  written testimonial there's no face, so only the name choice is shown;
-                  the server clamps via resolveDisplay. */}
               <fieldset className="mt-6">
                 <legend className="font-ui text-label uppercase tracking-wide text-ink-3">
                   How you&rsquo;ll appear
@@ -236,6 +362,33 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
                     );
                   })}
                 </div>
+
+                {/* video has a FACE → the show-face control (more-private-only: if the
+                    workspace default hides the face, the customer can't re-show it). Text
+                    has no face, so this is omitted there. */}
+                {path === "video" && (
+                  <label
+                    className={`mt-3 flex items-center gap-3 rounded-control border px-4 py-2.5 font-ui text-body-sm ${
+                      request.display.showFace
+                        ? "cursor-pointer border-hairline text-ink"
+                        : "cursor-not-allowed border-hairline opacity-40"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="accent-ink"
+                      checked={showFace}
+                      disabled={!request.display.showFace}
+                      onChange={(e) => setShowFace(e.target.checked)}
+                    />
+                    Show my face
+                    {!request.display.showFace && (
+                      <span className="ml-auto font-ui text-label text-ink-3">
+                        kept private
+                      </span>
+                    )}
+                  </label>
+                )}
               </fieldset>
 
               <FullTerms workspaceName={ws} />
@@ -243,6 +396,12 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
               <p className="mt-4 font-ui text-body-sm text-ink-3">
                 Changed your mind later? Ask {ws} and they&rsquo;ll take it down.
               </p>
+
+              {error && (
+                <p role="alert" className="mt-3 font-ui text-body-sm text-danger">
+                  {error}
+                </p>
+              )}
 
               <button
                 type="button"
@@ -252,17 +411,19 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
               >
                 Send to {ws}
               </button>
-              <BackLink onClick={() => setScreen("write")} />
+              <BackLink
+                onClick={() => setScreen(path === "video" ? "review" : "write")}
+              />
             </section>
           )}
 
           {/* ── PORT: 05 _ Sending ──────────────────────────────────────── */}
           {screen === "sending" && (
             <section className="text-center" aria-live="polite">
-              <p className="font-display text-display-md text-ink">Sending&hellip;</p>
-              <p className="mt-3 font-ui text-body-sm text-ink-3">
-                {pending ? "One moment." : "Almost there."}
+              <p className="font-display text-display-md text-ink">
+                {pending ? "Sending…" : "Almost there…"}
               </p>
+              <p className="mt-3 font-ui text-body-sm text-ink-3">One moment.</p>
             </section>
           )}
 
@@ -276,30 +437,25 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
                 Your words mean a lot to us.
               </p>
               <p className="mt-6 font-display text-display-xs text-ink">&mdash; {ws}</p>
-              {/* The "Follow {brand} →" affordance is omitted until a real brand social
-                  URL exists — an honest absence beats a dead control (P-XIII). */}
             </section>
           )}
 
-          {/* honest "coming" state for video/photo/audio (P-XIII — not a dead control) */}
+          {/* honest "coming" state for photo/audio (P-XIII — not a dead control) */}
           {screen === "coming" && (
             <section className="text-center">
-              <h1 className="font-display text-display-md text-ink">
-                Coming soon.
-              </h1>
+              <h1 className="font-display text-display-md text-ink">Coming soon.</h1>
               <p className="mt-3 font-ui text-body text-ink-2">
-                Video, photo, and audio capture are on the way. For now, a few written
-                words work just as well.
+                Photo and audio capture are on the way. For now, record a quick video or
+                write a few words.
               </p>
               <button
                 type="button"
-                onClick={() => setScreen("write")}
+                onClick={() => setScreen("prompt")}
                 style={primary}
                 className="mt-7 w-full rounded-control px-5 py-3.5 font-ui text-body font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
               >
-                Write it instead
+                Back
               </button>
-              <BackLink onClick={() => setScreen("prompt")} />
             </section>
           )}
         </div>
@@ -314,8 +470,168 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
   );
 }
 
-// A prompt option (screen 01). Wired options act; unwired show an honest "soon" tag and
-// route to the coming state — never dead (P-XIII).
+// ── PORT: 02 _ Recording — MediaRecorder on-device + upload fallback ──────────
+// Live camera preview + record/stop. If getUserMedia/MediaRecorder is unavailable or
+// permission is denied, falls back to a file upload (this is also the seam the polished
+// screen-09 "camera blocked" plugs into at T7.2b). Records → review only (No-Editor).
+function RecordScreen({
+  primary,
+  onClip,
+  onCancel,
+  onWriteInstead,
+}: {
+  primary: { backgroundColor: string; color: string };
+  onClip: (blob: Blob) => void;
+  onCancel: () => void;
+  onWriteInstead: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const [recording, setRecording] = useState(false);
+  const [fallback, setFallback] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const mime = pickVideoType();
+    if (mime == null || typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setFallback(true);
+      return;
+    }
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "user" }, audio: true })
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFallback(true); // permission denied / no camera → fallback
+      });
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  // recording timer
+  useEffect(() => {
+    if (!recording) return;
+    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(id);
+  }, [recording]);
+
+  function start() {
+    const stream = streamRef.current;
+    const mime = pickVideoType();
+    if (!stream || !mime) {
+      setFallback(true);
+      return;
+    }
+    chunksRef.current = [];
+    const rec = new MediaRecorder(stream, { mimeType: mime });
+    rec.ondataavailable = (e) => {
+      if (e.data.size > 0) chunksRef.current.push(e.data);
+    };
+    rec.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: mime });
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      onClip(blob);
+    };
+    recorderRef.current = rec;
+    rec.start();
+    setElapsed(0);
+    setRecording(true);
+  }
+  function stop() {
+    recorderRef.current?.stop();
+    setRecording(false);
+  }
+
+  const mmss = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
+
+  if (fallback) {
+    // Minimal camera-unavailable fallback (the polished screen-09 is T7.2b).
+    return (
+      <section className="text-center">
+        <h1 className="font-display text-display-md text-ink">No camera? No problem.</h1>
+        <p className="mt-3 font-ui text-body text-ink-2">
+          Upload a clip from your gallery, or write a few words instead.
+        </p>
+        <label
+          style={primary}
+          className="mt-7 block w-full cursor-pointer rounded-control px-5 py-3.5 font-ui text-body font-medium focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ink"
+        >
+          Upload from gallery
+          <input
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onClip(file);
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={onWriteInstead}
+          className="mt-3 w-full rounded-control border border-rule bg-card px-5 py-3 font-ui text-body-sm font-medium text-ink hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+        >
+          Write it instead
+        </button>
+      </section>
+    );
+  }
+
+  return (
+    <section className="text-center">
+      <div className="relative overflow-hidden rounded-clip bg-ink">
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          className="aspect-[3/4] w-full object-cover"
+        />
+        {recording && (
+          <span className="absolute left-3 top-3 flex items-center gap-2 rounded-pill bg-card/90 px-2.5 py-1 font-mono text-mono-sm text-ink">
+            <span className="size-2 rounded-pill bg-danger" aria-hidden />
+            {mmss}
+          </span>
+        )}
+      </div>
+      <p className="mt-4 font-ui text-body-sm text-ink-3">about 20 seconds</p>
+      {!recording ? (
+        <button
+          type="button"
+          onClick={start}
+          style={primary}
+          className="mt-5 w-full rounded-control px-5 py-3.5 font-ui text-body font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+        >
+          Start recording
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={stop}
+          className="mt-5 w-full rounded-control border border-rule bg-card px-5 py-3.5 font-ui text-body font-medium text-ink hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+        >
+          Stop
+        </button>
+      )}
+      <BackLink onClick={onCancel} />
+    </section>
+  );
+}
+
 function PromptOption({
   label,
   wired,
@@ -353,8 +669,6 @@ function PromptOption({
   );
 }
 
-// "Read the full terms" — an honest inline disclosure of the real, owned consent terms
-// (never a dead link). Plain-language; what the customer is agreeing to.
 function FullTerms({ workspaceName }: { workspaceName: string }) {
   return (
     <details className="mt-5 rounded-control border border-hairline bg-card px-4 py-3">
@@ -368,10 +682,10 @@ function FullTerms({ workspaceName }: { workspaceName: string }) {
           (for example, social posts).
         </p>
         <p>
-          You can choose how you appear (your name, or anonymous). Your consent is
-          recorded with a date and version, and you can withdraw it at any time by asking
-          {" "}
-          {workspaceName} &mdash; they&rsquo;ll stop using it and take down what they can.
+          You can choose how you appear (your name, or anonymous; your face shown or
+          hidden). Your consent is recorded with a date and version, and you can withdraw
+          it at any time by asking {workspaceName} &mdash; they&rsquo;ll stop using it and
+          take down what they can.
         </p>
         <p>
           {workspaceName} won&rsquo;t change your words. Nothing here is shared with anyone
