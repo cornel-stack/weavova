@@ -429,6 +429,9 @@ export const captureRequest = pgTable(
     // per-request, high-entropy, URL-safe; the public lookup key + the single-use guard
     token: text("token").notNull(),
     customerName: text("customer_name"), // brand-addressed prompt / thank-you (nullable)
+    // T7.3 — the recipient address for the Email delivery path (free-email entry, C7). The ONLY
+    // additive column this slice adds to capture_request; the token columns are untouched.
+    customerEmail: text("customer_email"),
     transactionRef: text("transaction_ref"), // transaction-leg context for the T7.5 verified bar
     status: captureRequestStatusEnum("status").notNull().default("open"),
     // authoritative access check is `expires_at > now()`; a stale status never grants access
@@ -464,3 +467,78 @@ export const verificationBasis = pgTable("verification_basis", {
     .notNull()
     .defaultNow(),
 });
+
+// ============================================================================
+// Requests (T7.3) — the merchant-side "send the ask". ADDITIVE: no existing table/column
+// changes (capture_request gains only `customer_email` above). TWO new entities, kept
+// distinct from the minted `capture_request`:
+//   • request_template — a REUSABLE ask definition the builder (06) saves. `manual_link` is
+//     the LIVE trigger; shopify/stripe/calendly persist as config but are honest P-XIII
+//     "coming" states (the deferred webhook/Sources track). The automation-mints-from-template
+//     bridge is shaped-for-later, NOT built here.
+//   • request_send — one row per DISPATCH (email or link). Powers honest per-request delivery
+//     state (C5) AND the template "N sent" aggregate = count(request_send). No opens/clicks
+//     columns — we never store unverifiable engagement (P-XIV).
+// ============================================================================
+export const requestTriggerEnum = pgEnum("request_trigger", [
+  "manual_link",
+  "shopify",
+  "stripe",
+  "calendly",
+]);
+export const requestChannelEnum = pgEnum("request_channel", ["email", "link"]);
+export const requestDeliveryStatusEnum = pgEnum("request_delivery_status", [
+  "accepted", // Resend accepted the email for delivery
+  "failed", // send attempted, rejected — honest, NOT "sent"
+  "link_generated", // link channel — a copyable URL, no email
+]);
+
+export const requestTemplate = pgTable(
+  "request_template",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    prompt: text("prompt").notNull(),
+    triggerType: requestTriggerEnum("trigger_type").notNull(),
+    deliveryChannel: requestChannelEnum("delivery_channel").notNull(),
+    sendTiming: text("send_timing"), // free text ("3 days after fulfillment"); informational for manual_link
+    consentLine: text("consent_line").notNull(), // verbatim consent shown at capture (P-VII)
+    consentVersion: text("consent_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("request_template_ws_idx").on(t.workspaceId)],
+);
+
+export const requestSend = pgTable(
+  "request_send",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // the minted instance that was dispatched (the T7.2 primitive; cascade with it)
+    requestId: uuid("request_id")
+      .notNull()
+      .references(() => captureRequest.id, { onDelete: "cascade" }),
+    // the template it was created from (null for ad-hoc modal sends); powers "N sent"
+    templateId: uuid("template_id").references(() => requestTemplate.id, {
+      onDelete: "set null",
+    }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    channel: requestChannelEnum("channel").notNull(),
+    recipientEmail: text("recipient_email"), // the address emailed; null for link
+    deliveryStatus: requestDeliveryStatusEnum("delivery_status").notNull(),
+    providerId: text("provider_id"), // Resend message id when returned
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("request_send_template_idx").on(t.templateId),
+    index("request_send_request_idx").on(t.requestId),
+  ],
+);

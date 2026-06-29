@@ -9,6 +9,7 @@ import {
   derivedAsset,
   proof,
   proofBrandAsset,
+  requestSend,
   source,
   verificationBasis,
   workspace,
@@ -1301,22 +1302,68 @@ export async function upsertBrandKit(
 export async function createCaptureRequest(
   workspaceId: string,
   sourceId: string,
-  opts: { customerName?: string | null; transactionRef?: string | null } = {},
-): Promise<{ token: string; expiresAt: Date }> {
+  opts: {
+    customerName?: string | null;
+    customerEmail?: string | null; // T7.3 — the Email-path recipient (additive)
+    transactionRef?: string | null;
+  } = {},
+): Promise<{ id: string; token: string; expiresAt: Date }> {
   const token = crypto.randomUUID();
   const expiresAt = new Date(
     Date.now() + CAPTURE_TOKEN_TTL_HOURS * 60 * 60 * 1000,
   );
-  await getDb().insert(captureRequest).values({
-    workspaceId,
-    sourceId,
-    token,
-    customerName: opts.customerName ?? null,
-    transactionRef: opts.transactionRef ?? null,
-    status: "open",
-    expiresAt,
+  const [row] = await getDb()
+    .insert(captureRequest)
+    .values({
+      workspaceId,
+      sourceId,
+      token,
+      customerName: opts.customerName ?? null,
+      customerEmail: opts.customerEmail ?? null,
+      transactionRef: opts.transactionRef ?? null,
+      status: "open",
+      expiresAt,
+    })
+    .returning({ id: captureRequest.id });
+  return { id: row.id, token, expiresAt };
+}
+
+// T7.3 — the workspace's `link` capture source id (the channel a /c/[token] proof is sourced
+// from). Workspace-scoped; created at seed. Returns null if the workspace has no link source.
+export async function getLinkSourceId(
+  workspaceId: string,
+): Promise<string | null> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({ id: source.id })
+      .from(source)
+      .where(and(eq(source.workspaceId, workspaceId), eq(source.kind, "link")))
+      .limit(1);
+    return rows[0]?.id ?? null;
   });
-  return { token, expiresAt };
+}
+
+// T7.3 — record one DISPATCH of a request (email or link). One row per send; powers the honest
+// per-request delivery state (C5) and the template "N sent" aggregate. Additive — never touches
+// the capture_request token model.
+export async function recordSend(input: {
+  requestId: string;
+  workspaceId: string;
+  channel: "email" | "link";
+  templateId?: string | null;
+  recipientEmail?: string | null;
+  deliveryStatus: "accepted" | "failed" | "link_generated";
+  providerId?: string | null;
+}): Promise<void> {
+  await getDb().insert(requestSend).values({
+    requestId: input.requestId,
+    workspaceId: input.workspaceId,
+    channel: input.channel,
+    templateId: input.templateId ?? null,
+    recipientEmail: input.recipientEmail ?? null,
+    deliveryStatus: input.deliveryStatus,
+    providerId: input.providerId ?? null,
+  });
 }
 
 // PUBLIC token resolution (T007) — token → request → workspace → brand. Returns a
