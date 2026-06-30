@@ -26,6 +26,12 @@ export const SOURCE_KINDS = [
   // via a request link gets a `link` source (label "Capture link"). Code-side allowlist
   // only (source.kind is text), so this is additive — NO migration.
   "link",
+  // T7.4 — the generic inbound webhook (POST /api/ingest). The universal door: any
+  // external platform (Zapier/Make/n8n bridging Shopify/Stripe/Calendly, native OAuth
+  // deferred) mints a capture_request through this source. Code-side allowlist only —
+  // additive, NO migration. A `webhook` source is ensured per workspace when its endpoint
+  // is created (getOrCreateWebhookEndpoint).
+  "webhook",
 ] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
 
@@ -58,6 +64,19 @@ export const nameDisplayEnum = pgEnum("name_display", [
   "full",
   "first_initial",
   "anonymous",
+]);
+
+// T7.4 — the media-normalize lifecycle (the worker, Increment 2). Nullable on `proof`:
+// null = no media (text proof) / pre-slice rows. `captured` = original in R2, not yet
+// normalized; `normalizing` = worker claimed it; `normalized` = normalized object written
+// (normalized_media_url set, the key T8 reads); `failed` = normalize failed, original
+// retained, no normalized key. The column ships now (additive ahead of its consumer); the
+// worker that drives it through this lifecycle is T7.4 Increment 2.
+export const mediaStatusEnum = pgEnum("media_status", [
+  "captured",
+  "normalizing",
+  "normalized",
+  "failed",
 ]);
 
 // The tenant a proof belongs to. Minimal for now; real workspaces/auth at T6.
@@ -118,6 +137,13 @@ export const proof = pgTable("proof", {
   // is the T8 render-engine's job (it reads mediaUrl) — pre-T8 a media proof renders through
   // the existing non-playing "media stored · playback coming" seam, never a <video>/<img>.
   mediaUrl: text("media_url"),
+  // T7.4 — the normalize worker's output (Increment 2). `normalizedMediaUrl` is the
+  // normalized R2 object key (T8 reads this when present); `mediaUrl` (the captured
+  // original) is NEVER overwritten. `mediaStatus` is the lifecycle (null = no media).
+  // ADDITIVE ahead of the worker that fills them — Increment 1 ships the columns; the
+  // media.captured emit + worker that drive them land in Increment 2.
+  normalizedMediaUrl: text("normalized_media_url"),
+  mediaStatus: mediaStatusEnum("media_status"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -440,6 +466,14 @@ export const captureRequest = pgTable(
     // additive column this slice adds to capture_request; the token columns are untouched.
     customerEmail: text("customer_email"),
     transactionRef: text("transaction_ref"), // transaction-leg context for the T7.5 verified bar
+    // T7.4 — the webhook's transaction-evidence marker (ADDITIVE; token columns UNCHANGED).
+    // Set by the inbound webhook when the caller signals a confirmed transaction
+    // (transaction_verified / _at). At proof-write, writeCapturedProof reads this: present
+    // → a MEDIUM verification_basis (source=webhook); absent → the WEAK manual basis. This
+    // is the bridge that lights the T7.5 "Verified real" stamp via the UNCHANGED resolver.
+    transactionVerifiedAt: timestamp("transaction_verified_at", {
+      withTimezone: true,
+    }),
     status: captureRequestStatusEnum("status").notNull().default("open"),
     // authoritative access check is `expires_at > now()`; a stale status never grants access
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
@@ -573,5 +607,67 @@ export const requestSend = pgTable(
   (t) => [
     index("request_send_template_idx").on(t.templateId),
     index("request_send_request_idx").on(t.requestId),
+  ],
+);
+
+// ============================================================================
+// Webhook ingestion (T7.4) — the generic inbound door. ADDITIVE: no existing
+// table/column changes (proof + capture_request gain only the columns above). TWO
+// new entities back the universal webhook (POST /api/ingest):
+//   • webhook_endpoint — ONE per workspace. The `secret` is a high-entropy token that
+//     REALLY authenticates the endpoint (P-XIII — not decorative): the route looks it up
+//     (unique index, constant-time compare) → the workspace the mint attributes to. Plain-
+//     stored so the honest config surface can show the real secret (regenerable;
+//     encrypt-at-rest/show-once is future hardening). A `webhook` source is ensured per
+//     workspace when the endpoint is created — webhook-minted requests attribute to it.
+//   • webhook_event — the idempotency ledger. UNIQUE(workspace_id, event_key) is the
+//     exactly-once guard: a duplicate delivery (Zapier re-fire / network retry / Inngest
+//     re-deliver) returns the EXISTING capture_request — no second mint (FR-005).
+// ============================================================================
+export const webhookEndpoint = pgTable(
+  "webhook_endpoint",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    // the `webhook` source the mints attribute to (restrict — never orphan a mint's source)
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => source.id, { onDelete: "restrict" }),
+    // high-entropy random token; shown to the merchant; the real authenticator
+    secret: text("secret").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // one endpoint per workspace + the secret→workspace lookup key
+    uniqueIndex("webhook_endpoint_workspace_unique").on(t.workspaceId),
+    uniqueIndex("webhook_endpoint_secret_unique").on(t.secret),
+  ],
+);
+
+export const webhookEvent = pgTable(
+  "webhook_event",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    // the caller's event_id, or a derived key (customer_email + transaction_ref) — the
+    // stable per-event identity the idempotency guard is keyed on
+    eventKey: text("event_key").notNull(),
+    // the mint this event produced (set null on request delete — the ledger row survives)
+    captureRequestId: uuid("capture_request_id").references(
+      () => captureRequest.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("webhook_event_ws_key_unique").on(t.workspaceId, t.eventKey),
   ],
 );

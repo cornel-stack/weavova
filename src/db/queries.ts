@@ -13,6 +13,8 @@ import {
   requestTemplate,
   source,
   verificationBasis,
+  webhookEndpoint,
+  webhookEvent,
   workspace,
 } from "./schema";
 import {
@@ -1359,6 +1361,11 @@ export async function createCaptureRequest(
     customerName?: string | null;
     customerEmail?: string | null; // T7.3 — the Email-path recipient (additive)
     transactionRef?: string | null;
+    // T7.4 — ADDITIVE: the webhook's transaction-evidence marker. When present (the caller
+    // signalled a confirmed transaction), it is written to capture_request and later drives
+    // the MEDIUM verification_basis at proof-write (writeCapturedProof). The token model
+    // (token/72h/single-use) is UNCHANGED — this is one extra nullable column.
+    transactionVerifiedAt?: Date | null;
   } = {},
 ): Promise<{ id: string; token: string; expiresAt: Date }> {
   const token = crypto.randomUUID();
@@ -1374,6 +1381,7 @@ export async function createCaptureRequest(
       customerName: opts.customerName ?? null,
       customerEmail: opts.customerEmail ?? null,
       transactionRef: opts.transactionRef ?? null,
+      transactionVerifiedAt: opts.transactionVerifiedAt ?? null,
       status: "open",
       expiresAt,
     })
@@ -1394,6 +1402,170 @@ export async function getLinkSourceId(
       .limit(1);
     return rows[0]?.id ?? null;
   });
+}
+
+// ============================================================================
+// T7.4 — the generic inbound webhook's data layer. The endpoint secret REALLY
+// authenticates (P-XIII): a high-entropy token → the workspace the mint attributes to.
+// All webhook-minted requests/proofs source from a per-workspace `webhook` source.
+// ============================================================================
+
+// A high-entropy, URL-safe webhook secret (256 bits via the WebCrypto global — no new
+// dependency, app stays 11 deps). The `whsec_` prefix is a readable marker, not a secret.
+function generateWebhookSecret(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const b64 = btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  return `whsec_${b64}`;
+}
+
+// Constant-time string equality — no early-exit on the first differing byte (secrets are
+// fixed-length, so the length pre-check leaks nothing). Pure JS → runtime-agnostic.
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return mismatch === 0;
+}
+
+// Get-or-create the workspace's `webhook` source (the channel webhook mints attribute to).
+// One per workspace; idempotent (get-first). Ensured when the endpoint is created.
+export async function ensureWebhookSource(
+  workspaceId: string,
+): Promise<string> {
+  return withDbRetry(async () => {
+    const existing = await getDb()
+      .select({ id: source.id })
+      .from(source)
+      .where(
+        and(eq(source.workspaceId, workspaceId), eq(source.kind, "webhook")),
+      )
+      .limit(1);
+    if (existing[0]) return existing[0].id;
+    const [row] = await getDb()
+      .insert(source)
+      .values({ workspaceId, kind: "webhook", label: "Webhook" })
+      .returning({ id: source.id });
+    return row.id;
+  });
+}
+
+// Get-or-create the workspace's ONE webhook endpoint, returning the REAL secret + the
+// webhook source id. The secret is shown on the honest config surface (T009) and is the
+// live authenticator (P-XIII — not decorative). Idempotent: an existing endpoint is
+// returned unchanged (regeneration is a future explicit action, not implicit here).
+export async function getOrCreateWebhookEndpoint(
+  workspaceId: string,
+): Promise<{ secret: string; sourceId: string }> {
+  return withDbRetry(async () => {
+    const existing = await getDb()
+      .select({
+        secret: webhookEndpoint.secret,
+        sourceId: webhookEndpoint.sourceId,
+      })
+      .from(webhookEndpoint)
+      .where(eq(webhookEndpoint.workspaceId, workspaceId))
+      .limit(1);
+    if (existing[0]) return existing[0];
+
+    const sourceId = await ensureWebhookSource(workspaceId);
+    const secret = generateWebhookSecret();
+    const [row] = await getDb()
+      .insert(webhookEndpoint)
+      .values({ workspaceId, sourceId, secret })
+      // a concurrent create wins the unique(workspace_id) — fall through to read it back
+      .onConflictDoNothing({ target: webhookEndpoint.workspaceId })
+      .returning({
+        secret: webhookEndpoint.secret,
+        sourceId: webhookEndpoint.sourceId,
+      });
+    if (row) return row;
+
+    const after = await getDb()
+      .select({
+        secret: webhookEndpoint.secret,
+        sourceId: webhookEndpoint.sourceId,
+      })
+      .from(webhookEndpoint)
+      .where(eq(webhookEndpoint.workspaceId, workspaceId))
+      .limit(1);
+    return after[0];
+  });
+}
+
+// The webhook's auth lookup: secret → workspace + webhook source. Unique-index lookup +
+// a constant-time compare of the stored secret against the presented one. Returns null
+// for a missing/unknown secret (the route maps null → a GENERIC 401, no disclosure).
+export async function getWorkspaceBySecret(
+  secret: string,
+): Promise<{ workspaceId: string; sourceId: string } | null> {
+  if (!secret) return null;
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        workspaceId: webhookEndpoint.workspaceId,
+        sourceId: webhookEndpoint.sourceId,
+        secret: webhookEndpoint.secret,
+      })
+      .from(webhookEndpoint)
+      .where(eq(webhookEndpoint.secret, secret))
+      .limit(1);
+    const row = rows[0];
+    if (!row) return null;
+    if (!constantTimeEqual(row.secret, secret)) return null;
+    return { workspaceId: row.workspaceId, sourceId: row.sourceId };
+  });
+}
+
+// The idempotency ledger READ: has this (workspace, event_key) already minted? Returns the
+// prior mint's request id + token (the duplicate-replay path returns the SAME capture_url —
+// no second mint), or null for a first-seen event. Left-joins capture_request so a replay
+// resolves its /c/[token] without a second query.
+export async function findWebhookEvent(
+  workspaceId: string,
+  eventKey: string,
+): Promise<{ captureRequestId: string | null; token: string | null } | null> {
+  return withDbRetry(async () => {
+    const rows = await getDb()
+      .select({
+        captureRequestId: webhookEvent.captureRequestId,
+        token: captureRequest.token,
+      })
+      .from(webhookEvent)
+      .leftJoin(
+        captureRequest,
+        eq(webhookEvent.captureRequestId, captureRequest.id),
+      )
+      .where(
+        and(
+          eq(webhookEvent.workspaceId, workspaceId),
+          eq(webhookEvent.eventKey, eventKey),
+        ),
+      )
+      .limit(1);
+    return rows[0] ?? null;
+  });
+}
+
+// The idempotency ledger WRITE: record that this (workspace, event_key) minted a request.
+// onConflictDoNothing on the unique(workspace_id, event_key) makes a concurrent duplicate a
+// no-op rather than an error (the unique index is the real exactly-once guard).
+export async function recordWebhookEvent(
+  workspaceId: string,
+  eventKey: string,
+  captureRequestId: string,
+): Promise<void> {
+  await getDb()
+    .insert(webhookEvent)
+    .values({ workspaceId, eventKey, captureRequestId })
+    .onConflictDoNothing({
+      target: [webhookEvent.workspaceId, webhookEvent.eventKey],
+    });
 }
 
 // T7.3 — record one DISPATCH of a request (email or link). One row per send; powers the honest
@@ -1636,16 +1808,24 @@ export async function writeCapturedProof(input: {
   const basisId = crypto.randomUUID();
   const now = new Date();
 
-  // T7.5 — the live link/manual path can attach at most a WEAK basis: the merchant's
-  // capture_request.transaction_ref is an ASSERTION, not a system confirmation, so it
-  // stays BELOW the bar (FR-019) — link-captured proof shows the honest in-between, never
-  // the stamp, until the deferred Sources track lands. Read here (by requestId) so the
-  // /c/[token] route/action stays untouched (FR-014 — no caller change).
+  // T7.4 — the basis branch. Read the request's transaction evidence by requestId (so the
+  // /c/[token] route/action stays UNTOUCHED — FR-014/FR-017, no caller change). The webhook
+  // sets capture_request.transaction_verified_at when the caller signalled a confirmed
+  // transaction; that presence is the discriminator:
+  //   • transaction_verified_at present → a MEDIUM, source=webhook basis → the T7.5 resolver
+  //     (UNCHANGED) lights the "Verified real" stamp via the forward contract (qualifyingBasisExpr
+  //     already counts strength in (strong,medium) + a non-null transaction_verified_at).
+  //   • absent (the live link/manual path) → a WEAK, source=manual basis: a merchant ASSERTION,
+  //     not a system confirmation — stays BELOW the bar (FR-019), shows the honest in-between.
   const [reqRow] = await getDb()
-    .select({ transactionRef: captureRequest.transactionRef })
+    .select({
+      transactionRef: captureRequest.transactionRef,
+      transactionVerifiedAt: captureRequest.transactionVerifiedAt,
+    })
     .from(captureRequest)
     .where(eq(captureRequest.id, input.requestId))
     .limit(1);
+  const hasTransactionEvidence = reqRow?.transactionVerifiedAt != null;
 
   await getDb().batch([
     getDb().insert(proof).values({
@@ -1679,13 +1859,22 @@ export async function writeCapturedProof(input: {
       proofId,
       requestId: input.requestId,
       consentCapturedAt: now, // the consent leg — REAL
-      // the transaction leg — WEAK: a manual assertion, below the bar (no confirmation).
-      source: "manual",
-      strength: "weak",
+      // T7.4 — the transaction leg, graded by the request's evidence (above). Webhook
+      // evidence ⇒ MEDIUM (earns the stamp via the unchanged resolver); else WEAK (a
+      // merchant assertion, below the bar — the honest in-between, no over-claim, P-XIV).
+      source: hasTransactionEvidence ? "webhook" : "manual",
+      strength: hasTransactionEvidence ? "medium" : "weak",
       transactionRef: reqRow?.transactionRef ?? null,
-      transactionVerifiedAt: null,
+      transactionVerifiedAt: hasTransactionEvidence
+        ? reqRow!.transactionVerifiedAt
+        : null,
     }),
   ]);
+
+  // T7.4 Increment 2 (T019) lands NEXT here: set proof.media_status='captured' on the
+  // insert above (when mediaUrl present) and emit `media.captured` via emitInngest after
+  // this batch, to drive the Railway normalize worker. NOT in Increment 1 — the worker
+  // doesn't exist yet, so there is no consumer for the event. Intentionally deferred.
 
   return { proofId };
 }
