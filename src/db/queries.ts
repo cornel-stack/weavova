@@ -31,6 +31,7 @@ import type {
 } from "@/lib/brand-asset";
 import type { ConsentState, ProofDetailView, ProofView } from "@/lib/proof";
 import { emitInngest } from "@/lib/inngest-emit";
+import { deleteCaptureObject } from "@/lib/r2";
 import { proofIsVerified, verificationState } from "@/lib/verification";
 import type { ShowcaseItem } from "@/lib/showcase";
 import { sampleVideoRef, type PostTextPackage } from "@/lib/export";
@@ -80,6 +81,11 @@ export async function getDefaultWorkspace(): Promise<Workspace | null> {
 // shared helper so the proof reads and the T2.4a derived-asset withdrawal filter
 // use IDENTICAL logic (one source of truth — P-VII). A proof with no consent row
 // yields null → a non-granted state (fails closed).
+//
+// F5 — PREDICATE PARITY (CANONICAL PAIR, T7.4a). The worker's atomic `markNormalized`
+// consent gate (worker/src/db.ts) replicates THIS subquery — latest consent row by
+// `version`, state = 'granted'. They are the canonical pair; a drift is a P-VII bug. If you
+// change this shape, change worker/src/db.ts markNormalized too.
 function effectiveConsentState(proofIdColumn: AnyColumn) {
   return sql<ConsentState | null>`(
   select c.state from ${consent} c
@@ -1241,6 +1247,36 @@ export async function recordConsentWithdrawal(
     revokedAt: new Date(),
     version: nextVersion,
   });
+
+  // P-VII — cascade the withdrawal to the FILE, not just the app surface (T7.4a). The
+  // `revoked` version above is the AUTHORITATIVE gate (the resolver hides the proof + its
+  // derived assets the instant it lands, regardless of the file). The object delete is
+  // best-effort + IDEMPOTENT (deleteCaptureObject treats a 404 as success): null keys (text
+  // proof) → no-op; already-gone (re-withdrawal / a prior delete) → no-op. A TRANSIENT R2
+  // failure is LOGGED, NOT surfaced — the withdrawal STILL returns 'recorded' (the consent
+  // record + resolver-hide is the gate; the residual is reconciled by re-withdrawal, the
+  // FR-007a on-access reconcile in presignCaptureRead, or a future sweep). The consent RECORD
+  // is RETAINED for audit; only the MEDIA object is destroyed. Both columns hold captures-
+  // bucket KEYS (T7.4a); a legacy http-URL value would 404 here → harmless no-op.
+  const mediaRows = await getDb()
+    .select({
+      mediaUrl: proof.mediaUrl,
+      normalizedMediaUrl: proof.normalizedMediaUrl,
+    })
+    .from(proof)
+    .where(eq(proof.id, proofId));
+  const cascadeKeys = [mediaRows[0]?.mediaUrl, mediaRows[0]?.normalizedMediaUrl];
+  for (const key of cascadeKeys) {
+    if (!key) continue;
+    try {
+      await deleteCaptureObject(key);
+    } catch (err) {
+      console.error(
+        `[recordConsentWithdrawal] best-effort R2 delete failed for key "${key}" (proof ${proofId}); consent is revoked, media residual will reconcile on retry`,
+        err,
+      );
+    }
+  }
 
   return { status: "recorded", version: nextVersion };
 }

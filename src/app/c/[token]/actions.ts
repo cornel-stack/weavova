@@ -14,7 +14,14 @@ import {
   CAPTURE_MAX_BYTES,
   type CaptureVideoType,
 } from "@/lib/capture";
-import { assetUrlForKey, captureMediaKey, presignPut } from "@/lib/r2";
+// presignCaptureUploadToR2: the PRIVATE captures-bucket signed PUT (T7.4a). Aliased because
+// the public server action below is also named presignCaptureUpload (the /c page calls it —
+// that name is part of the page contract, unchanged). Customer media now stores the KEY, not
+// a public URL, so assetUrlForKey/presignPut (the PUBLIC brand path) are no longer used here.
+import {
+  captureMediaKey,
+  presignCaptureUpload as presignCaptureUploadToR2,
+} from "@/lib/r2";
 
 // The capture Server Actions (T7.2). TOKEN-SCOPED: identity is resolved from the token,
 // never a session (no getCurrentWorkspace on this public route). Increment 1 wired TEXT;
@@ -65,7 +72,9 @@ export async function presignCaptureUpload(input: {
     `${randomUUID()}.${EXT_BY_TYPE[input.contentType]}`,
   );
   try {
-    const uploadUrl = await presignPut(key, input.contentType);
+    // PRIVATE captures bucket — the browser PUTs the bytes to the private customer-media
+    // bucket (no public domain). The page flow is identical (it still gets { uploadUrl, key }).
+    const uploadUrl = await presignCaptureUploadToR2(key, input.contentType);
     return { status: "ok", uploadUrl, key };
   } catch {
     return { status: "error" };
@@ -112,7 +121,10 @@ export async function submitCapture(input: {
     proofType = "video";
     // No transcription in T7.2 (a later tier) → transcript null, like the fixtures.
     transcript = null;
-    mediaUrl = assetUrlForKey(input.mediaKey);
+    // T7.4a — persist the raw captures-bucket KEY (not a public URL). Matches schema.ts:
+    // mediaUrl is "the captured SOURCE-media R2 key". The worker fetches by this key; the
+    // only sanctioned read is a signed presignCaptureRead. assetUrlForKey is never used here.
+    mediaUrl = input.mediaKey;
   } else {
     return { status: "invalid", reason: "That option isn't available yet." };
   }

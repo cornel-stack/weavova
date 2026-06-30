@@ -6,7 +6,7 @@ import {
 } from "../db.js";
 import { inngest, type MediaCapturedData } from "../inngest.js";
 import { normalizeMedia, type NormalizableType } from "../normalize.js";
-import { getObject, putObject } from "../r2.js";
+import { deleteObject, getObject, putObject } from "../r2.js";
 
 // media.captured → normalize. Idempotent + retry-safe under Inngest at-least-once delivery:
 //   • Status-gated: act only on captured|normalizing; a duplicate that finds `normalized`
@@ -52,8 +52,10 @@ export const mediaCaptured = inngest.createFunction(
     if (!target.act) return { proofId, skipped: target.reason };
 
     // Download → normalize → upload → mark. One step so an Inngest retry re-runs the whole
-    // deterministic pipeline (safe: same input key, same output key). Temp scratch is
-    // cleaned inside normalizeMedia's finally.
+    // deterministic pipeline (safe: same input key, same output key). `mediaKey` is now the
+    // captures-bucket KEY (T7.4a) — getObject fetches the private original (the Finding-2 fix:
+    // the GET was previously handed a URL where a key was expected). normalizeMedia (the
+    // encode) is UNCHANGED. Temp scratch is cleaned inside normalizeMedia's finally.
     const result = await step.run("normalize", async () => {
       const original = await getObject(mediaKey);
       const { body, contentType, ext } = await normalizeMedia(
@@ -62,10 +64,22 @@ export const mediaCaptured = inngest.createFunction(
       );
       const normalizedKey = `capture/${workspaceId}/${proofId}/normalized.${ext}`;
       await putObject(normalizedKey, body, contentType);
-      await markNormalized(proofId, normalizedKey);
-      return { normalizedKey, bytes: body.byteLength };
+      // D6 (atomic) — the consent-gated conditional UPDATE. 1 row → persisted; 0 rows →
+      // consent was withdrawn during the encode, so this normalized object is an ORPHAN:
+      // hard-delete the worker's OWN output, set terminal media_status='failed' (reuse the
+      // existing enum — no migration), and do NOT persist the URL. No read-then-write window.
+      const affected = await markNormalized(proofId, normalizedKey);
+      if (affected === 0) {
+        await deleteObject(normalizedKey);
+        await markFailed(proofId);
+        return { normalizedKey: null as string | null, withdrawn: true };
+      }
+      return { normalizedKey: normalizedKey as string | null, bytes: body.byteLength };
     });
 
+    if (result.normalizedKey === null) {
+      return { proofId, skipped: "consent-withdrawn-mid-normalize" };
+    }
     return { proofId, normalized: result.normalizedKey };
   },
 );

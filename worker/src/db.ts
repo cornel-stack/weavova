@@ -1,6 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 // D9 — the SINGLE shared schema (src/db/schema.ts). The worker imports it directly from
 // the repo (Railway builds from the repo-root context); there is NO worker-local copy, so
 // the worker and the app can never drift (P-VI). The `.js` specifier is the nodenext
@@ -8,6 +8,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import {
   brandKit,
   captureRequest,
+  consent,
   proof,
   requestSend,
   workspace,
@@ -83,16 +84,40 @@ export async function claimForNormalize(proofId: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-// Success: record the normalized object key + flip to `normalized`. The captured
-// original (mediaUrl) is NEVER touched.
+// Success path, made ATOMIC for the D6 orphan race (T7.4a). A SINGLE consent-gated
+// conditional UPDATE: write the normalized key + flip to `normalized` ONLY IF the proof's
+// effective consent is still granted. Returns the affected row count:
+//   • 1 row  → persisted (consent held through the encode).
+//   • 0 rows → consent was WITHDRAWN mid-encode; the worker's own output is now an orphan
+//     (the caller deletes it + sets terminal media_status='failed'). No read-then-write
+//     window — the cascade is airtight under concurrency; the worker's output is subject to it.
+// The captured original (mediaUrl) is NEVER touched.
+//
+// F5 — PREDICATE PARITY (CANONICAL PAIR). The WHERE consent predicate below MUST match
+// `effectiveConsentState`/`effectiveConsentGranted` in src/db/queries.ts EXACTLY — the latest
+// consent row by `version`, state = 'granted'. These two are the canonical pair; a drift
+// between them is a P-VII bug. If you change one, change the other.
 export async function markNormalized(
   proofId: string,
   normalizedKey: string,
-): Promise<void> {
-  await getDb()
+): Promise<number> {
+  const rows = await getDb()
     .update(proof)
     .set({ normalizedMediaUrl: normalizedKey, mediaStatus: "normalized" })
-    .where(eq(proof.id, proofId));
+    .where(
+      and(
+        eq(proof.id, proofId),
+        // Mirror of src/db/queries.ts effectiveConsentState (latest version, granted).
+        sql`(
+          select c.state from ${consent} c
+          where c.proof_id = ${proof.id}
+          order by c.version desc
+          limit 1
+        ) = 'granted'`,
+      ),
+    )
+    .returning({ id: proof.id });
+  return rows.length;
 }
 
 // Failure (terminal, after bounded retries): flip to `failed`. The ORIGINAL mediaUrl is
