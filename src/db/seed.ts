@@ -242,6 +242,7 @@ async function seed() {
 
   let proofCount = 0;
   let consentCount = 0;
+  let basisCount = 0; // T7.5 — verification bases backfilled (strong for verified, weak for granted-unverified)
   for (const f of FIXTURES) {
     const [row] = await db
       .insert(proof)
@@ -254,7 +255,9 @@ async function seed() {
         sourceId: sourceIdByKind.get(f.sourceKind)!,
         capturedAt: new Date(f.capturedAt),
         reviewed: f.reviewed,
-        verified: f.verified,
+        // T7.5 — proof.verified is WRITE-FROZEN (retired-in-place): no longer written as truth.
+        // It defaults to false and is never read; verified-state is DERIVED by the resolver from
+        // consent + the verification_basis below. `f.verified` now drives which basis is seeded.
         thumbnail: null,
       })
       .returning({ id: proof.id });
@@ -288,6 +291,39 @@ async function seed() {
         .returning({ id: consent.id });
       consentIdByProofVersion.set(`${row.id}:${c.version}`, crow.id);
       consentCount += 1;
+    }
+
+    // T7.5 — the verification basis (the transaction leg of "Verified real"). Models what
+    // the DEFERRED Sources track will write: the verified fixtures get a STRONG native basis
+    // (a system-confirmed transaction) that legitimately earns the stamp; the other
+    // granted-consent fixtures get a WEAK manual basis (a merchant assertion, BELOW the bar —
+    // never earns the stamp, FR-019); awaiting/revoked fixtures get none. request_id is null
+    // (these are not link-captured). The resolver (proofIsVerified) reads strength≥bar AND a
+    // confirmed transaction_verified_at — so only the strong rows are verified.
+    const effectiveConsent = f.consent[f.consent.length - 1];
+    const consentCapturedAt = new Date(f.capturedAt);
+    if (f.verified) {
+      await db.insert(verificationBasis).values({
+        proofId: row.id,
+        requestId: null,
+        consentCapturedAt,
+        source: "native",
+        strength: "strong",
+        transactionVerifiedAt: consentCapturedAt,
+        transactionRef: `ord_${f.sourceKind}_${proofCount.toString().padStart(4, "0")}`,
+      });
+      basisCount += 1;
+    } else if (effectiveConsent.state === "granted") {
+      await db.insert(verificationBasis).values({
+        proofId: row.id,
+        requestId: null,
+        consentCapturedAt,
+        source: "manual",
+        strength: "weak",
+        transactionVerifiedAt: null,
+        transactionRef: null,
+      });
+      basisCount += 1;
     }
   }
 
@@ -481,7 +517,7 @@ async function seed() {
   }
 
   console.log(
-    `seeded: workspace=1 owner=${ownerEmail} (display "Maya K.") membership=1 sources=${SOURCES.length} proofs=${proofCount} consent=${consentCount} clips=${clipCount} brandAssets=${brandAssetCount} attachments=${attachmentCount} brandKit=1 captureRequests=${captureRequestCount} requestTemplates=${templateCount} requestSends=${requestSendCount}`,
+    `seeded: workspace=1 owner=${ownerEmail} (display "Maya K.") membership=1 sources=${SOURCES.length} proofs=${proofCount} consent=${consentCount} verificationBases=${basisCount} clips=${clipCount} brandAssets=${brandAssetCount} attachments=${attachmentCount} brandKit=1 captureRequests=${captureRequestCount} requestTemplates=${templateCount} requestSends=${requestSendCount}`,
   );
 }
 

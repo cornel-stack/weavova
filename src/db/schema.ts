@@ -105,6 +105,11 @@ export const proof = pgTable("proof", {
     .references(() => source.id, { onDelete: "restrict" }),
   capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
   reviewed: boolean("reviewed").notNull().default(false),
+  // T7.5 — WRITE-FROZEN / INTERNAL (retired-in-place, D1). Verified-state is NO LONGER a
+  // stored truth: it is DERIVED by the resolver (src/lib/verification.ts) = effective consent
+  // granted AND a qualifying (strong|medium + confirmed) verification_basis. This column is
+  // never READ by any projection or surface; it is kept only to keep migration 0009 additive.
+  // A physical DROP is a deferred follow-up (do not read this column — use proofIsVerified).
   verified: boolean("verified").notNull().default(false),
   thumbnail: text("thumbnail"),
   // T7.2 — the captured SOURCE-media R2 key (video this slice; audio/photo later).
@@ -447,26 +452,52 @@ export const captureRequest = pgTable(
   ],
 );
 
+// T7.5 — the graded transaction leg. `basis_strength` grades how genuinely a basis
+// EVIDENCES a real transaction; the verified bar = strong|medium (FR-019). `basis_source`
+// records WHAT produced it ("source quality feeds the bar"). native/webhook are the
+// DEFERRED Sources track (T7.4+); manual is the only LIVE producer now and is below the
+// bar (a merchant assertion, not a system confirmation). Ordered strong > medium > weak.
+export const basisStrengthEnum = pgEnum("basis_strength", [
+  "strong", // system-confirmed transaction from a native connector
+  "medium", // webhook-evidenced transaction
+  "weak", // manual merchant assertion / plain link — NEVER earns the stamp
+]);
+export const basisSourceEnum = pgEnum("basis_source", [
+  "native", // native connector (deferred Sources track) — typically strong
+  "webhook", // generic webhook payload (T7.4, deferred) — typically medium
+  "manual", // manual link / merchant entry (live today) — weak
+]);
+
 export const verificationBasis = pgTable("verification_basis", {
   id: uuid("id").primaryKey().defaultRandom(),
   proofId: uuid("proof_id")
     .notNull()
     .references(() => proof.id, { onDelete: "cascade" }),
-  requestId: uuid("request_id")
-    .notNull()
-    .references(() => captureRequest.id, { onDelete: "restrict" }),
+  // T7.5 — NULLABLE: a native/webhook/seed basis has NO capture_request (it does not
+  // originate from a /c/[token] link). Link-captured bases still set it. Forward contract:
+  // the deferred Sources track writes a basis with request_id null + a typed strength.
+  requestId: uuid("request_id").references(() => captureRequest.id, {
+    onDelete: "restrict",
+  }),
   // the consent leg — REAL (set when the customer grants consent at capture)
   consentCapturedAt: timestamp("consent_captured_at", {
     withTimezone: true,
   }).notNull(),
-  // the transaction leg — STUB (null this slice; set in T7.5). Both non-null ⇒ verifiable.
+  // the transaction leg — T7.5 made real. A strong/medium basis ALWAYS carries a non-null
+  // transaction_verified_at (the resolver re-checks this so a malformed row can't over-claim);
+  // a weak basis has it null. Both legs present + strength≥bar ⇒ proofIsVerified true.
   transactionVerifiedAt: timestamp("transaction_verified_at", {
     withTimezone: true,
   }),
+  // T7.5 — WHAT produced the basis + HOW strongly it evidences a transaction (the bar).
+  source: basisSourceEnum("source").notNull().default("manual"),
+  strength: basisStrengthEnum("strength").notNull().default("weak"),
+  // the evidence identifier (order id / payload id) — or the merchant's assertion when weak.
+  transactionRef: text("transaction_ref"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (t) => [index("verification_basis_proof_idx").on(t.proofId)]);
 
 // ============================================================================
 // Requests (T7.3) — the merchant-side "send the ask". ADDITIVE: no existing table/column

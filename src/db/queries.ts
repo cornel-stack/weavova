@@ -28,6 +28,7 @@ import type {
   ProofBrandAssetView,
 } from "@/lib/brand-asset";
 import type { ConsentState, ProofDetailView, ProofView } from "@/lib/proof";
+import { proofIsVerified } from "@/lib/verification";
 import type { ShowcaseItem } from "@/lib/showcase";
 import { sampleVideoRef, type PostTextPackage } from "@/lib/export";
 import {
@@ -117,6 +118,23 @@ function effectiveConsentGrantsScope(
 // to the prior inline subquery (behaviour-preserving; ProofView/getProofs unchanged).
 const latestConsentState = effectiveConsentState(proof.id);
 
+// T7.5 — the transaction leg of the verified resolver, as a correlated EXISTS predicate
+// (mirrors effectiveConsentState's shape). The verified BAR: a basis only counts if its
+// strength is strong|medium AND it carries a confirmed transaction_verified_at — so a
+// merchant's weak assertion, or a malformed strong row with no confirmation, can NEVER
+// over-claim (FR-019). Surfaced as the internal row field `hasQualifyingBasis`; the verified
+// boolean is produced ONLY by proofIsVerified (the chokepoint — proof.verified is unread).
+function qualifyingBasisExpr(proofIdColumn: AnyColumn) {
+  return sql<boolean>`(
+  exists (
+    select 1 from ${verificationBasis} b
+    where b.proof_id = ${proofIdColumn}
+      and b.strength in ('strong', 'medium')
+      and b.transaction_verified_at is not null
+  )
+)`;
+}
+
 const proofColumns = {
   id: proof.id,
   customerName: proof.customerName,
@@ -127,7 +145,9 @@ const proofColumns = {
   thumbnail: proof.thumbnail,
   capturedAt: proof.capturedAt,
   reviewed: proof.reviewed,
-  verified: proof.verified,
+  // T7.5 — the resolver INPUT, not the verified truth. proof.verified is no longer selected;
+  // toView derives `verified` from consent + this basis leg via proofIsVerified (the chokepoint).
+  hasQualifyingBasis: qualifyingBasisExpr(proof.id),
   consentState: latestConsentState,
 };
 
@@ -141,11 +161,13 @@ type ProofRow = {
   thumbnail: string | null;
   capturedAt: Date;
   reviewed: boolean;
-  verified: boolean;
+  hasQualifyingBasis: boolean;
   consentState: ConsentState | null;
 };
 
 function toView(row: ProofRow): ProofView {
+  // no consent row → not granted (gate fails closed)
+  const consentState = row.consentState ?? "awaiting";
   return {
     id: row.id,
     customerName: row.customerName,
@@ -153,12 +175,15 @@ function toView(row: ProofRow): ProofView {
     quote: row.quote,
     transcript: row.transcript,
     source: row.source,
-    // no consent row → not granted (gate fails closed)
-    consentState: row.consentState ?? "awaiting",
+    consentState,
     thumbnail: row.thumbnail,
     capturedAt: row.capturedAt.toISOString(),
     reviewed: row.reviewed,
-    verified: row.verified,
+    // T7.5 — the SOLE verified-state read (consent AND basis; short-circuits on consent).
+    verified: proofIsVerified({
+      consentState,
+      hasQualifyingBasis: row.hasQualifyingBasis,
+    }),
   };
 }
 
@@ -377,7 +402,7 @@ export async function getDashboardSummary(
     const latestClipRows = await db
       .select({
         customerName: proof.customerName,
-        verified: proof.verified,
+        hasQualifyingBasis: qualifyingBasisExpr(proof.id),
         createdAt: derivedAsset.createdAt,
       })
       .from(derivedAsset)
@@ -394,7 +419,11 @@ export async function getDashboardSummary(
     const latestClip: LatestClipDescriptor | null = latest
       ? {
           customerName: latest.customerName,
-          verified: latest.verified,
+          // T7.5 — verified via the resolver; the WHERE gate guarantees granted consent.
+          verified: proofIsVerified({
+            consentState: "granted",
+            hasQualifyingBasis: latest.hasQualifyingBasis,
+          }),
           createdAt: latest.createdAt.toISOString(),
         }
       : null;
@@ -613,7 +642,7 @@ export async function getLibraryClips(
         id: derivedAsset.id,
         proofId: derivedAsset.proofId,
         customerName: proof.customerName,
-        verified: proof.verified,
+        hasQualifyingBasis: qualifyingBasisExpr(proof.id),
         kind: derivedAsset.kind,
         format: derivedAsset.format,
         assetUrl: derivedAsset.assetUrl,
@@ -634,7 +663,11 @@ export async function getLibraryClips(
       id: row.id,
       proofId: row.proofId,
       customerName: row.customerName,
-      verified: row.verified,
+      // T7.5 — verified via the resolver; the WHERE gate guarantees granted consent.
+      verified: proofIsVerified({
+        consentState: "granted",
+        hasQualifyingBasis: row.hasQualifyingBasis,
+      }),
       kind: row.kind,
       format: row.format,
       assetUrl: row.assetUrl,
@@ -674,7 +707,7 @@ export async function getClip(
         proofId: derivedAsset.proofId,
         customerName: proof.customerName,
         proofType: proof.proofType,
-        verified: proof.verified,
+        hasQualifyingBasis: qualifyingBasisExpr(proof.id),
         source: source.label,
         // made-under provenance (the consent version the clip was generated under)
         madeUnderVersion: consent.version,
@@ -710,7 +743,11 @@ export async function getClip(
       proofId: row.proofId,
       customerName: row.customerName,
       proofType: row.proofType,
-      verified: row.verified,
+      // T7.5 — verified via the resolver; the gate guarantees granted, coalesce defensively.
+      verified: proofIsVerified({
+        consentState: row.consentState ?? "granted",
+        hasQualifyingBasis: row.hasQualifyingBasis,
+      }),
       source: row.source,
       madeUnderVersion: Number(row.madeUnderVersion),
       madeUnderAt: row.madeUnderAt
@@ -959,7 +996,7 @@ const exportColumns = {
   hook: derivedAsset.hook,
   createdAt: derivedAsset.createdAt,
   customerName: proof.customerName,
-  verified: proof.verified,
+  hasQualifyingBasis: qualifyingBasisExpr(proof.id),
   proofType: proof.proofType,
   quote: proof.quote,
   transcript: proof.transcript,
@@ -973,7 +1010,7 @@ type ExportRow = {
   hook: string | null;
   createdAt: Date;
   customerName: string;
-  verified: boolean;
+  hasQualifyingBasis: boolean;
   proofType: ProofView["proofType"];
   quote: string | null;
   transcript: string | null;
@@ -989,7 +1026,11 @@ function toPostTextPackage(row: ExportRow): PostTextPackage {
     headline: row.quote ?? row.transcript ?? null,
     hook: row.hook,
     customerName: row.customerName,
-    verified: row.verified,
+    // T7.5 — verified via the resolver; the export read is consent-gated (granted guaranteed).
+    verified: proofIsVerified({
+      consentState: "granted",
+      hasQualifyingBasis: row.hasQualifyingBasis,
+    }),
     source: row.source,
     proofType: row.proofType,
     format: row.format,
