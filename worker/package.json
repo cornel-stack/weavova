@@ -1,0 +1,23 @@
+{
+  "name": "weavova-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Weavova Railway worker — Inngest serve host (T7.4 normalize; T8 renderer is a future 2nd service). SEPARATE deployable: these deps are HOST-SIDE only, the Vercel app stays at 11 runtime deps.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/worker/src/index.js"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "aws4fetch": "^1.0.20",
+    "drizzle-orm": "^0.45.2",
+    "inngest": "^3.40.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "next-auth": "^5.0.0-beta.31",
+    "typescript": "^5.6.0"
+  }
+}

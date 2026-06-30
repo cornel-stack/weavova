@@ -25,10 +25,15 @@ const DEFAULT_EVENT_API_BASE = "https://inn.gs";
  *
  * @param name the event name (e.g. "request.created", "media.captured")
  * @param data the event payload (serialized as JSON)
+ * @param opts.id an OPTIONAL stable event id. When set, Inngest dedupes events sharing
+ *   the id — the SECOND idempotency layer (T7.4 Increment 2) atop the app's webhook_event
+ *   ledger: a same-id re-delivery is ignored by Inngest before any worker function runs.
+ *   Use a deterministic value (e.g. "media.captured:<proofId>").
  */
 export async function emitInngest(
   name: string,
   data: Record<string, unknown>,
+  opts?: { id?: string },
 ): Promise<void> {
   const eventKey = process.env.INNGEST_EVENT_KEY;
   if (!eventKey) {
@@ -44,7 +49,11 @@ export async function emitInngest(
     await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, data }),
+      body: JSON.stringify({
+        name,
+        data,
+        ...(opts?.id ? { id: opts.id } : {}),
+      }),
     });
     // We deliberately do NOT inspect the response: a non-2xx is logged-and-forgotten,
     // not surfaced. The worker's at-least-once + idempotency model tolerates a missed

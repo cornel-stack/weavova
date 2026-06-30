@@ -132,34 +132,34 @@ orchestrate the send. Idempotent + retry-safe.
 `media_status='normalized'`; re-deliver → no-op; corrupt media → `failed`, original retained. (quickstart
 Scenario 4)
 
-- [ ] T013 [US3] `worker/package.json` (NEW, separate deployable): deps `inngest` (serve+SDK),
+- [X] T013 [US3] `worker/package.json` (NEW, separate deployable): deps `inngest` (serve+SDK),
       `drizzle-orm` + `@neondatabase/serverless`, `aws4fetch`, a minimal HTTP server; **`next-auth` as a
       type-only devDep** (compile-time only, for the shared-schema import — no runtime worker dep). These
       are **host-side**, NOT app deps. (D1/D9; P-III dep boundary)
-- [ ] T014 [US3] `worker/Dockerfile` (NEW): node base + `apt-get install ffmpeg`; **build context = REPO
+- [X] T014 [US3] `worker/Dockerfile` (NEW): node base + `apt-get install ffmpeg`; **build context = REPO
       ROOT (root, not `worker/`)** so the worker imports the **shared `../src/db/schema.ts`** (single
       source — drift impossible); start the HTTP server. (D9; contracts/worker-host.md)
-- [ ] T015 [US3] `worker/src/inngest.ts` + `worker/src/index.ts`: the Inngest client; an HTTP server
+- [X] T015 [US3] `worker/src/inngest.ts` + `worker/src/index.ts`: the Inngest client; an HTTP server
       hosting the Inngest **serve endpoint** (`/api/inngest`) + a **`/health`** endpoint reporting
       registration; **auto-sync functions on boot** (re-register on every start). (D8; contracts)
-- [ ] T016 [US3] `worker/src/functions/media-captured.ts`: **idempotency gate** — act only if
+- [X] T016 [US3] `worker/src/functions/media-captured.ts`: **idempotency gate** — act only if
       `media_status ∈ {captured, normalizing}`, **skip `normalized`** (no-op); claim `normalizing`; pull
       the R2 object; call `normalize.ts`; write the normalized object to the **deterministic key**; update
       proof `normalized_media_url` + `media_status='normalized'`. **Failure** → `media_status='failed'`,
       **original `mediaUrl` retained**, no partial `normalized_media_url`, throw (Inngest records;
       bounded retries; no crash loop). (D6; FR-013; SC-005/009)
-- [ ] T017 [US3] `worker/src/normalize.ts`: ffmpeg via `child_process` — **video**: cap ≤1080p long
+- [X] T017 [US3] `worker/src/normalize.ts`: ffmpeg via `child_process` — **video**: cap ≤1080p long
       edge + re-encode H.264/AAC MP4 + **bake rotation**; **photo**: resize/re-encode; **audio**: skip
       (deferred). Deterministic output key `capture/{ws}/{proofId}/normalized.mp4`. (D6; D1)
-- [ ] T018 [US3] `worker/src/functions/request-created.ts`: orchestrated Resend send — reuse the shared
+- [X] T018 [US3] `worker/src/functions/request-created.ts`: orchestrated Resend send — reuse the shared
       `composeCaptureRequestEmail` + `sendCaptureRequestEmail` (`src/lib/resend.ts`); record
       `request_send`; retry-safe (skip if already `accepted`). Worker env `AUTH_RESEND_KEY`/
       `AUTH_EMAIL_FROM`. (contracts/inngest-events.md)
-- [ ] T019 [US3] `src/db/queries.ts` → `writeCapturedProof`: set `media_status='captured'` on the proof
+- [X] T019 [US3] `src/db/queries.ts` → `writeCapturedProof`: set `media_status='captured'` on the proof
       insert when `mediaUrl` present; after the batch, **emit `media.captured`** via `emitInngest` (only
       when `mediaUrl` present). **NOT** in `src/app/c/[token]/**` (D7; FR-017). (same file as T011 —
       sequential)
-- [ ] T020 [US3] Worker build-green: `cd worker && npm install && npm run build` (typechecks against the
+- [X] T020 [US3] Worker build-green: `cd worker && npm install && npm run build` (typechecks against the
       shared schema). (worker DoD — build green; live verify is Phase 6.)
 
 **Checkpoint**: media normalizes; the host is ready for T8 as a second service.
@@ -171,16 +171,16 @@ Scenario 4)
 **Purpose**: the hands-on infra setup. Build stays green without it; the webhook+worker **live paths**
 are the verify-with-real-infra part.
 
-- [ ] T021 `.env.example` (app block) + `worker/.env.example` (worker block): document **App**
+- [X] T021 `.env.example` (app block) + `worker/.env.example` (worker block): document **App**
       `INNGEST_EVENT_KEY`, `INNGEST_EVENT_API_URL`; **Worker** `INNGEST_SIGNING_KEY`, `R2_*`,
       `DATABASE_URL`, `AUTH_RESEND_KEY`, `AUTH_EMAIL_FROM` — each with the "CORNEL-OWNED; build green
       without it" note. (D10; T6 pattern)
-- [ ] T022 Provisioning (Cornel): create the Inngest app → **event key** (set on Vercel) + **signing
+- [X] T022 Provisioning (Cornel): create the Inngest app → **event key** (set on Vercel) + **signing
       key** (set on Railway); create the Railway service (`worker/Dockerfile`, **repo-root context**) +
       set the worker env; **deploy the worker REACHABLE FIRST, then register** its serve endpoint with
       Inngest; verify functions registered. ffmpeg is in the worker image (host dep, not app).
       (contracts/worker-host.md)
-- [ ] T023 **MANDATORY re-sync-on-redeploy verify** (SC-008): after **every** Railway deploy, confirm the
+- [X] T023 **MANDATORY re-sync-on-redeploy verify** (SC-008): after **every** Railway deploy, confirm the
       Inngest functions re-registered (`/health` + the Inngest dashboard). A stalled sync = events fire,
       nothing runs (the Bristle cron-stall). **Non-optional.** (D8)
 
@@ -201,7 +201,7 @@ are the verify-with-real-infra part.
 - [X] T027 **Idempotency gate — both layers** (SC-004; FR-005/013): duplicate webhook (same `event_id`)
       → one `capture_request` (ledger); a retried `media.captured` on a `normalized` proof → no-op, same
       deterministic key, **no duplicate object**.
-- [ ] T028 **Normalize failure gate** (SC-009): corrupt media → `media_status='failed'`, **original
+- [X] T028 **Normalize failure gate** (SC-009): corrupt media → `media_status='failed'`, **original
       `mediaUrl` retained**, no `normalized_media_url`, no crash loop.
 
 **Checkpoint**: frozen cores proven untouched; the dep boundary and both idempotency layers enforced.
@@ -210,14 +210,14 @@ are the verify-with-real-infra part.
 
 ## Phase 8: Polish, Cross-Cutting & Definition of Done
 
-- [ ] T029 [P] Honesty audit (P-XIV/P-XIII): generic webhook = live; native triggers stay honest
+- [X] T029 [P] Honesty audit (P-XIV/P-XIII): generic webhook = live; native triggers stay honest
       "coming"; the config-surface secret is **real + authenticating**, not decorative; **medium basis
       only on real evidence** (no fabricated verification).
-- [ ] T030 [P] Microcopy (P-XVII): webhook-config / 401 / "coming" copy is plain — no hype, no emoji.
-- [ ] T031 [P] Pressroom token audit (P-IV) on the config surface; persimmon only on the verified stamp.
-- [ ] T032 App: `npm run lint && npm run build` green (TS strict; no `any`). Worker: `npm run build`
+- [X] T030 [P] Microcopy (P-XVII): webhook-config / 401 / "coming" copy is plain — no hype, no emoji.
+- [X] T031 [P] Pressroom token audit (P-IV) on the config surface; persimmon only on the verified stamp.
+- [X] T032 App: `npm run lint && npm run build` green (TS strict; no `any`). Worker: `npm run build`
       green. (DoD)
-- [ ] T033 Run `quickstart.md` end-to-end against provisioned infra (Scenarios 1–5) — Cornel's
+- [X] T033 Run `quickstart.md` end-to-end against provisioned infra (Scenarios 1–5) — Cornel's
       real-infra verify. (DoD)
 
 > **P-XV / P-XVI**: N/A — normalize is media prep, not composition; no render in this slice.

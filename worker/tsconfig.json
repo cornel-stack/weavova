@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "rootDir": "..",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "declaration": false,
+    "sourceMap": false,
+    "noEmitOnError": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "drizzle-orm": ["./node_modules/drizzle-orm"],
+      "drizzle-orm/*": ["./node_modules/drizzle-orm/*"],
+      "next-auth": ["./node_modules/next-auth"],
+      "next-auth/*": ["./node_modules/next-auth/*"]
+    }
+  },
+  "comment": "rootDir='..' (repo root) is the D9 shared-schema decision: the worker imports the SINGLE src/db/schema.ts (no worker-local copy → no drift). Output lands under dist/ mirroring the repo layout (dist/worker/src/index.js imports ../../src/db/schema.js → dist/src/db/schema.js). next-auth is a TYPE-ONLY devDep — schema.ts's `import type` from next-auth/adapters is erased at runtime. Railway builds from the REPO-ROOT context so ../src resolves.",
+  "include": ["src/**/*.ts", "../src/db/schema.ts"],
+  "exclude": ["node_modules", "dist"]
+}

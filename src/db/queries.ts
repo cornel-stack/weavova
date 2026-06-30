@@ -30,6 +30,7 @@ import type {
   ProofBrandAssetView,
 } from "@/lib/brand-asset";
 import type { ConsentState, ProofDetailView, ProofView } from "@/lib/proof";
+import { emitInngest } from "@/lib/inngest-emit";
 import { proofIsVerified, verificationState } from "@/lib/verification";
 import type { ShowcaseItem } from "@/lib/showcase";
 import { sampleVideoRef, type PostTextPackage } from "@/lib/export";
@@ -1842,6 +1843,10 @@ export async function writeCapturedProof(input: {
       // Verified-state is DERIVED by the resolver from consent + the weak basis below (→ false).
       thumbnail: null, // poster is T8; the captured media key lives in mediaUrl
       mediaUrl: input.mediaUrl,
+      // T7.4 Increment 2 (T019) — a media proof enters the normalize lifecycle at
+      // `captured`; a text proof has no media (null). The worker drives captured →
+      // normalizing → normalized|failed; mediaUrl (the original) is never overwritten.
+      mediaStatus: input.mediaUrl ? "captured" : null,
     }),
     getDb().insert(consent).values({
       id: consentId,
@@ -1871,10 +1876,24 @@ export async function writeCapturedProof(input: {
     }),
   ]);
 
-  // T7.4 Increment 2 (T019) lands NEXT here: set proof.media_status='captured' on the
-  // insert above (when mediaUrl present) and emit `media.captured` via emitInngest after
-  // this batch, to drive the Railway normalize worker. NOT in Increment 1 — the worker
-  // doesn't exist yet, so there is no consumer for the event. Intentionally deferred.
+  // T7.4 Increment 2 (T019) — drive the normalize worker. AFTER the durable batch (so the
+  // proof is committed before the async follow-up is scheduled) and ONLY when there is media
+  // to normalize. Emitted from writeCapturedProof, NOT the frozen /c/[token] route (D7/FR-017).
+  // The Inngest event id is the stable proofId → Inngest dedupes an at-least-once re-delivery
+  // (the SECOND idempotency layer, atop the worker's status gate + deterministic output key).
+  // Best-effort: if Inngest isn't provisioned, this no-ops and the captured proof still stands.
+  if (input.mediaUrl) {
+    await emitInngest(
+      "media.captured",
+      {
+        proofId,
+        workspaceId: input.workspaceId,
+        mediaKey: input.mediaUrl,
+        proofType: input.proofType,
+      },
+      { id: `media.captured:${proofId}` },
+    );
+  }
 
   return { proofId };
 }

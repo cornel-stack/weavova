@@ -1,0 +1,15 @@
+# Docker build context = repo ROOT (Railway worker, worker/Dockerfile). The Dockerfile
+# COPYs only what the worker needs (worker/ + src/db/schema.ts), but excluding heavy dirs
+# keeps the context transfer small. Does NOT affect Vercel (which ignores .dockerignore).
+node_modules
+**/node_modules
+.next
+dist
+**/dist
+.git
+.env
+.env.local
+.env.*.local
+npm-debug.log*
+.DS_Store
+coverage

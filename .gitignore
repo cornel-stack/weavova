@@ -1,6 +1,10 @@
 # dependencies
 /node_modules
 
+# T7.4 worker (Railway) — separate package: ignore its deps + build output
+worker/node_modules
+worker/dist
+
 # next.js
 /.next/
 /out/

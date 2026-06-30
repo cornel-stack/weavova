@@ -24,5 +24,6 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "comment": "exclude `worker` — the Railway worker (T7.4) is a separate package with its own worker/tsconfig.json; the app must not typecheck it (it resolves a different node_modules + uses nodenext .js specifiers).",
+  "exclude": ["node_modules", "worker"]
 }
