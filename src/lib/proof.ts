@@ -5,6 +5,7 @@
 // capturedAt). ProofCardProps aliases ProofView so the T0.2 ProofCard is unchanged.
 
 import type { consentStateEnum, proofTypeEnum } from "@/db/schema";
+import type { VerificationState } from "./verification";
 
 export type ProofType = (typeof proofTypeEnum)["enumValues"][number];
 
@@ -43,6 +44,11 @@ export interface ProofDetailView extends ProofView {
   consentVersion: number | null;
   /** ISO effective-consent date; null when none applies */
   consentAt: string | null;
+  /** T7.5 — the three-state resolver output (the sole verified-state read). `verified`
+   *  (above) === (verificationState === "verified"); the detail uses the richer state to
+   *  draw the quiet "consent_only" in-between label. Cards never read this — they use the
+   *  boolean. Additive: no other surface or shape changes. */
+  verificationState: VerificationState;
   /** T7.2 — captured source-media R2 key; null for text + every existing fixture.
    *  Drives the non-playing "media stored · playback at T8" seam (NOT a player). */
   mediaUrl: string | null;

@@ -411,8 +411,10 @@ export const membership = pgTable(
 // the public /c/[token] page; the token is PER-REQUEST, SINGLE-USE, and EXPIRING
 // (72h). `verification_basis` records WHY a proof can later earn the "Verified real"
 // stamp — a REAL consent leg (captured at /c/[token]) + a STUB transaction leg
-// (transaction_verified_at stays null until T7.5). No stamp is shown until both legs
-// exist; proof.verified stays false this slice.
+// (transaction_verified_at stays null until T7.5). At T7.5 the transaction leg is made
+// real (graded source/strength + a confirmed transaction_verified_at) and verified-state
+// is DERIVED by the resolver (src/lib/verification.ts) = consent granted AND a qualifying
+// (strong|medium + confirmed) basis; proof.verified is retired-in-place (write-frozen, unread).
 // ============================================================================
 export const captureRequestStatusEnum = pgEnum("capture_request_status", [
   "open",

@@ -28,7 +28,7 @@ import type {
   ProofBrandAssetView,
 } from "@/lib/brand-asset";
 import type { ConsentState, ProofDetailView, ProofView } from "@/lib/proof";
-import { proofIsVerified } from "@/lib/verification";
+import { proofIsVerified, verificationState } from "@/lib/verification";
 import type { ShowcaseItem } from "@/lib/showcase";
 import { sampleVideoRef, type PostTextPackage } from "@/lib/export";
 import {
@@ -299,6 +299,12 @@ function toDetailView(row: ProofDetailRow): ProofDetailView {
         ? null
         : new Date(row.consentEffectiveAt).toISOString(),
     mediaUrl: row.mediaUrl ?? null,
+    // T7.5 — the richer three-state read for the detail's in-between label. SAME inputs as
+    // `verified` (consent + basis), via the SAME resolver — never re-derived ad hoc.
+    verificationState: verificationState({
+      consentState: row.consentState ?? "awaiting",
+      hasQualifyingBasis: row.hasQualifyingBasis,
+    }),
   };
 }
 
@@ -1630,6 +1636,17 @@ export async function writeCapturedProof(input: {
   const basisId = crypto.randomUUID();
   const now = new Date();
 
+  // T7.5 — the live link/manual path can attach at most a WEAK basis: the merchant's
+  // capture_request.transaction_ref is an ASSERTION, not a system confirmation, so it
+  // stays BELOW the bar (FR-019) — link-captured proof shows the honest in-between, never
+  // the stamp, until the deferred Sources track lands. Read here (by requestId) so the
+  // /c/[token] route/action stays untouched (FR-014 — no caller change).
+  const [reqRow] = await getDb()
+    .select({ transactionRef: captureRequest.transactionRef })
+    .from(captureRequest)
+    .where(eq(captureRequest.id, input.requestId))
+    .limit(1);
+
   await getDb().batch([
     getDb().insert(proof).values({
       id: proofId,
@@ -1641,7 +1658,8 @@ export async function writeCapturedProof(input: {
       sourceId: input.sourceId,
       capturedAt: now,
       reviewed: false,
-      verified: false, // NO stamp — the transaction leg is a stub (T7.5)
+      // T7.5 — proof.verified WRITE-FROZEN (retired-in-place): not written; defaults false.
+      // Verified-state is DERIVED by the resolver from consent + the weak basis below (→ false).
       thumbnail: null, // poster is T8; the captured media key lives in mediaUrl
       mediaUrl: input.mediaUrl,
     }),
@@ -1661,7 +1679,11 @@ export async function writeCapturedProof(input: {
       proofId,
       requestId: input.requestId,
       consentCapturedAt: now, // the consent leg — REAL
-      transactionVerifiedAt: null, // the transaction leg — STUB (T7.5)
+      // the transaction leg — WEAK: a manual assertion, below the bar (no confirmation).
+      source: "manual",
+      strength: "weak",
+      transactionRef: reqRow?.transactionRef ?? null,
+      transactionVerifiedAt: null,
     }),
   ]);
 
