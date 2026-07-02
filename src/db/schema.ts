@@ -95,6 +95,12 @@ export const workspace = pgTable("workspace", {
   // sets it for Lumen so the future wizard never treats the configured demo as brand-new).
   // Additive, nullable, no default — inert until the onboarding wizard reads it (a later slice).
   onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
+  // T6.2 — onboarding-wizard config the merchant sets in step 1 / step 4. Both nullable text with
+  // a CODE-side allowlist (the source.kind precedent), NOT a pgEnum — the sets can grow without a
+  // migration. business_type seeds later smart defaults; first_format is a preference the render
+  // engine (T8) will honour (it produces nothing now). Additive, no default.
+  businessType: text("business_type"),
+  firstFormat: text("first_format"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

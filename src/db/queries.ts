@@ -30,6 +30,12 @@ import type {
   ProofBrandAssetView,
 } from "@/lib/brand-asset";
 import type { ConsentState, ProofDetailView, ProofView } from "@/lib/proof";
+import {
+  isBusinessType,
+  isFirstFormat,
+  type BusinessType,
+  type FirstFormat,
+} from "@/lib/onboarding";
 import { emitInngest } from "@/lib/inngest-emit";
 import { deleteCaptureObject } from "@/lib/r2";
 import { proofIsVerified, verificationState } from "@/lib/verification";
@@ -75,6 +81,53 @@ export async function getDefaultWorkspace(): Promise<Workspace | null> {
       .limit(1);
     return rows[0] ?? null;
   });
+}
+
+// ── T6.2 · Onboarding-wizard writes (DATA LAYER, allowlist-guarded) ───────────
+// The wizard's real config writes. Each is workspace-scoped and idempotent (a plain
+// UPDATE). Allowlists live in src/lib/onboarding.ts (the source.kind text+allowlist
+// precedent) so a bad value is rejected here, never persisted. onboarded_at is set by
+// markWorkspaceOnboarded on finish (skip is Increment 2). None touches a frozen core.
+
+export async function setWorkspaceBusinessType(
+  workspaceId: string,
+  value: BusinessType,
+): Promise<void> {
+  if (!isBusinessType(value)) {
+    throw new Error(`Invalid business_type: ${String(value)}`);
+  }
+  await withDbRetry(() =>
+    getDb()
+      .update(workspace)
+      .set({ businessType: value })
+      .where(eq(workspace.id, workspaceId)),
+  );
+}
+
+export async function setWorkspaceFirstFormat(
+  workspaceId: string,
+  value: FirstFormat,
+): Promise<void> {
+  if (!isFirstFormat(value)) {
+    throw new Error(`Invalid first_format: ${String(value)}`);
+  }
+  await withDbRetry(() =>
+    getDb()
+      .update(workspace)
+      .set({ firstFormat: value })
+      .where(eq(workspace.id, workspaceId)),
+  );
+}
+
+// The onboarding TERMINAL write (finish). Sets onboarded_at = now(); idempotent (re-setting
+// an already-set timestamp is harmless, and the inverse gate makes re-entry impossible).
+export async function markWorkspaceOnboarded(workspaceId: string): Promise<void> {
+  await withDbRetry(() =>
+    getDb()
+      .update(workspace)
+      .set({ onboardedAt: sql`now()` })
+      .where(eq(workspace.id, workspaceId)),
+  );
 }
 
 // Effective consent = the latest version's state (correlated subquery), as one

@@ -19,4 +19,7 @@ export function middleware(req: NextRequest) {
   return NextResponse.next();
 }
 
-export const config = { matcher: ["/app/:path*"] };
+// T6.2 — /onboard/* is authenticated too (the onboarding wizard), so it gets the same
+// Layer-1 cookie-presence gate. Still NO DB read here — the onboarded_at check lives in the
+// Layer-2 layouts (/app + /onboard), never in middleware.
+export const config = { matcher: ["/app/:path*", "/onboard/:path*"] };

@@ -70,6 +70,12 @@ export async function getCurrentWorkspace(): Promise<Workspace> {
         // type (Workspace = workspace.$inferSelect). Inert today; the onboarding wizard (a
         // later slice) reads it. No behavioural change — no current consumer reads this field.
         onboardedAt: workspace.onboardedAt,
+        // T6.2 — carry business_type / first_format so the returned Workspace matches the
+        // (widened) full-row type, and so the onboarding steps can PRE-FILL the merchant's
+        // prior selections on resume. Inert for existing consumers (none read these). Same
+        // Option-A pattern as onboarded_at above (add the column to the explicit select).
+        businessType: workspace.businessType,
+        firstFormat: workspace.firstFormat,
         createdAt: workspace.createdAt,
       })
       .from(membership)

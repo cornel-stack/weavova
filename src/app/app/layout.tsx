@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
 import { AppChrome } from "@/components/app/app-chrome";
 import { getCurrentWorkspace, getSession } from "@/lib/session";
 
@@ -16,6 +17,16 @@ export default async function AppLayout({
     getSession(),
     getCurrentWorkspace(),
   ]);
+
+  // T6.2 — the onboarding FORWARD gate (Layer 2, the DB-reading chokepoint; middleware
+  // stays DB-free). A workspace that hasn't finished onboarding (onboarded_at IS NULL — the
+  // T6.1 seam, already carried on the Workspace) is routed into the wizard before any app
+  // surface renders. Onboarded workspaces (incl. the seeded Lumen owner) fall straight
+  // through — byte-stable. getCurrentWorkspace() already selects onboarded_at, so this is a
+  // free read (session.ts untouched).
+  if (workspace.onboardedAt == null) {
+    redirect("/onboard/role");
+  }
 
   // Pass only name/slug — never the workspace id — into the chrome.
   return (
