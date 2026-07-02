@@ -205,6 +205,10 @@ async function seed() {
       slug: "lumen",
       defaultNameDisplay: WS_DISPLAY_DEFAULT.nameDisplay,
       defaultShowFace: WS_DISPLAY_DEFAULT.showFace,
+      // T6.1 — the seeded demo is a fully-configured workspace: mark it onboarded so the
+      // future onboarding wizard never treats it as brand-new. Fresh bootstrap workspaces
+      // (src/auth.ts) leave onboarded_at NULL. No backfill of any other row.
+      onboardedAt: new Date(),
     })
     .returning({ id: workspace.id });
 

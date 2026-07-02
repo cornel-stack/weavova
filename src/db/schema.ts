@@ -90,6 +90,11 @@ export const workspace = pgTable("workspace", {
   // A customer can only override toward MORE privacy than this default (resolveDisplay).
   defaultNameDisplay: nameDisplayEnum("default_name_display"),
   defaultShowFace: boolean("default_show_face"),
+  // T6.1 — the onboarding seam. NULL = freshly created, not yet onboarded (the state the
+  // sign-in bootstrap leaves; src/auth.ts). A set timestamp = onboarding completed (the seed
+  // sets it for Lumen so the future wizard never treats the configured demo as brand-new).
+  // Additive, nullable, no default — inert until the onboarding wizard reads it (a later slice).
+  onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

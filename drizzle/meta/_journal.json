@@ -78,6 +78,13 @@
       "when": 1782819527287,
       "tag": "0010_familiar_vengeance",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782986873505,
+      "tag": "0011_heavy_sabretooth",
+      "breakpoints": true
     }
   ]
 }

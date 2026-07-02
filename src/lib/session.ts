@@ -66,6 +66,10 @@ export async function getCurrentWorkspace(): Promise<Workspace> {
         // the (widened) full-row type. Inert today; the capture form (T7.2) reads them.
         defaultNameDisplay: workspace.defaultNameDisplay,
         defaultShowFace: workspace.defaultShowFace,
+        // T6.1 — carry onboarded_at so the returned Workspace matches the (widened) full-row
+        // type (Workspace = workspace.$inferSelect). Inert today; the onboarding wizard (a
+        // later slice) reads it. No behavioural change — no current consumer reads this field.
+        onboardedAt: workspace.onboardedAt,
         createdAt: workspace.createdAt,
       })
       .from(membership)
@@ -79,7 +83,7 @@ export async function getCurrentWorkspace(): Promise<Workspace> {
 
   if (!ws) {
     throw new Error(
-      "No workspace found for the signed-in user. New users are provisioned a workspace on sign-in (src/auth.ts events.createUser); the demo owner is seeded (npm run db:seed).",
+      "No workspace found for the signed-in user. New users are provisioned a workspace on sign-in (src/auth.ts events.signIn → bootstrapWorkspaceIfNeeded); the demo owner is seeded (npm run db:seed).",
     );
   }
   return ws;
