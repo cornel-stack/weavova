@@ -29,8 +29,16 @@ export default async function CapturePage({
   const resolved = await getCaptureRequestByToken(token);
 
   if (resolved.status !== "ok") {
-    // Honest block — expired / used / not-found (the polished screen-10 port is T7.2b).
-    return <CaptureBlock kind={resolved.status} />;
+    // Honest block — expired / used / not-found (polished screen-10 port). expired/used carry
+    // the workspace name for personalization; not-found has none (generic, no leak).
+    return (
+      <CaptureBlock
+        kind={resolved.status}
+        workspaceName={
+          resolved.status === "not_found" ? undefined : resolved.workspaceName
+        }
+      />
+    );
   }
 
   return <CaptureFlow request={resolved.request} />;

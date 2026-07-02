@@ -13,20 +13,53 @@ export type CaptureProofPath = "video" | "text" | "photo" | "audio";
 // Increment 1 wired TEXT; Increment 2 wires VIDEO (MediaRecorder + upload fallback).
 // PHOTO/AUDIO remain honest "coming" states (T7.2b). The prompt shows all four — faithful
 // to screen 01 — with the unwired ones rendering a "coming" state (P-XIII).
-export const CAPTURE_WIRED_PATHS: CaptureProofPath[] = ["text", "video"];
-export const CAPTURE_COMING_PATHS: CaptureProofPath[] = ["photo", "audio"];
+// T7.2b — ALL FOUR paths are wired (text + video spine; photo + audio this slice). The
+// prompt shows all four live (screen 01); no "coming" state remains.
+export const CAPTURE_WIRED_PATHS: CaptureProofPath[] = [
+  "text",
+  "video",
+  "photo",
+  "audio",
+];
+export const CAPTURE_COMING_PATHS: CaptureProofPath[] = [];
 
 // Per-request token expiry (Q1 = 72h). Config-overridable via env at creation time.
 export const CAPTURE_TOKEN_TTL_HOURS = 72;
 
-// Allowed media content types for the capture upload (video this slice's Increment 2;
-// audio/photo are T7.2b). Kept here so the presign action + the client agree.
+// Allowed media content types for the capture upload. Kept here so the presign action +
+// the client agree. VIDEO (spine) + IMAGE + AUDIO (T7.2b). All store a KEY in the PRIVATE
+// captures bucket (T7.4a); the worker normalizes video/photo and skips audio.
 export const CAPTURE_ALLOWED_VIDEO_TYPES = [
   "video/webm",
   "video/mp4",
   "video/quicktime",
 ] as const;
 export type CaptureVideoType = (typeof CAPTURE_ALLOWED_VIDEO_TYPES)[number];
+
+// Image types — includes HEIC/HEIF (iOS libraries commonly deliver it; the worker's ffmpeg
+// re-encodes photos to JPEG, so HEIC input is normalized).
+export const CAPTURE_ALLOWED_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+] as const;
+export type CaptureImageType = (typeof CAPTURE_ALLOWED_IMAGE_TYPES)[number];
+
+// Audio types — the formats MediaRecorder emits across browsers.
+export const CAPTURE_ALLOWED_AUDIO_TYPES = [
+  "audio/webm",
+  "audio/mp4",
+  "audio/mpeg",
+] as const;
+export type CaptureAudioType = (typeof CAPTURE_ALLOWED_AUDIO_TYPES)[number];
+
+// Any accepted capture media type (video ∪ image ∪ audio).
+export type CaptureMediaType =
+  | CaptureVideoType
+  | CaptureImageType
+  | CaptureAudioType;
 
 // A sane ceiling for a short mobile clip (~60s). Generous but bounded; the server
 // re-validates on presign. (Bytes never transit the app server regardless.)
@@ -53,9 +86,12 @@ export interface CaptureRequestView {
   comingPaths: CaptureProofPath[];
 }
 
-// Discriminated token resolution — no workspace identifiers leak on a bad token.
+// Discriminated token resolution. T7.2b — expired/used carry the workspace NAME so screen 10
+// can personalize ("{Workspace} can send you a fresh one"): the token genuinely maps to that
+// workspace and the holder received the link from them, so this is not a leak. not_found has
+// no row → no name (nothing to personalize; no enumeration).
 export type CaptureResolution =
   | { status: "ok"; request: CaptureRequestView }
-  | { status: "expired" }
-  | { status: "used" }
+  | { status: "expired"; workspaceName: string }
+  | { status: "used"; workspaceName: string }
   | { status: "not_found" };

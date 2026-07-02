@@ -1769,9 +1769,12 @@ export async function getCaptureRequestByToken(
 
     const row = rows[0];
     if (!row) return { status: "not_found" };
-    if (row.status === "used") return { status: "used" };
+    // T7.2b — used/expired carry the workspace name (the token maps to a real workspace the
+    // holder heard from; personalizes screen 10). not_found stays bare (no row → no leak).
+    if (row.status === "used")
+      return { status: "used", workspaceName: row.workspaceName };
     if (new Date(row.expiresAt).getTime() <= Date.now())
-      return { status: "expired" };
+      return { status: "expired", workspaceName: row.workspaceName };
 
     const kit = await getBrandKit(row.workspaceId);
     const view: CaptureRequestView = {

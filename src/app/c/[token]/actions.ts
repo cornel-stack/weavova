@@ -10,9 +10,11 @@ import {
 } from "@/db/queries";
 import { resolveDisplay, type NameDisplay } from "@/lib/consent";
 import {
+  CAPTURE_ALLOWED_AUDIO_TYPES,
+  CAPTURE_ALLOWED_IMAGE_TYPES,
   CAPTURE_ALLOWED_VIDEO_TYPES,
   CAPTURE_MAX_BYTES,
-  type CaptureVideoType,
+  type CaptureMediaType,
 } from "@/lib/capture";
 // presignCaptureUploadToR2: the PRIVATE captures-bucket signed PUT (T7.4a). Aliased because
 // the public server action below is also named presignCaptureUpload (the /c page calls it —
@@ -28,14 +30,30 @@ import {
 // Increment 2 adds VIDEO (record on-device → presigned-PUT direct to R2 → the SAME atomic
 // send). The consume guard + db.batch send core are UNCHANGED (media-agnostic).
 
-const EXT_BY_TYPE: Record<CaptureVideoType, string> = {
+// T7.2b — the ext map spans video + image + audio (all store a KEY in the private captures
+// bucket). HEIC keeps its extension; the worker re-encodes photos to JPEG on normalize.
+const EXT_BY_TYPE: Record<CaptureMediaType, string> = {
   "video/webm": "webm",
   "video/mp4": "mp4",
   "video/quicktime": "mov",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/heic": "heic",
+  "image/heif": "heif",
+  "audio/webm": "weba",
+  "audio/mp4": "m4a",
+  "audio/mpeg": "mp3",
 };
 
-function isAllowedVideoType(t: string): t is CaptureVideoType {
-  return (CAPTURE_ALLOWED_VIDEO_TYPES as readonly string[]).includes(t);
+// Accept any allowed capture media type (video ∪ image ∪ audio). Widened from the
+// video-only gate for T7.2b; storage/routing (private bucket, KEY) is unchanged.
+function isAllowedCaptureType(t: string): t is CaptureMediaType {
+  return (
+    (CAPTURE_ALLOWED_VIDEO_TYPES as readonly string[]).includes(t) ||
+    (CAPTURE_ALLOWED_IMAGE_TYPES as readonly string[]).includes(t) ||
+    (CAPTURE_ALLOWED_AUDIO_TYPES as readonly string[]).includes(t)
+  );
 }
 
 // T014 — presign a short-lived R2 PUT for a captured video. The browser PUTs the bytes
@@ -52,8 +70,8 @@ export async function presignCaptureUpload(input: {
   | { status: "closed" } // used / expired / unknown — ask for a fresh link
   | { status: "error" }
 > {
-  if (!isAllowedVideoType(input.contentType)) {
-    return { status: "invalid", reason: "That video format isn't supported." };
+  if (!isAllowedCaptureType(input.contentType)) {
+    return { status: "invalid", reason: "That file format isn't supported." };
   }
   if (
     typeof input.sizeBytes !== "number" ||
@@ -96,13 +114,13 @@ export type SubmitCaptureResult =
 // from Increment 1; this adds the VIDEO branch (proofType='video', mediaUrl=the R2 key).
 export async function submitCapture(input: {
   token: string;
-  path: "text" | "video"; // photo/audio are T7.2b
+  path: "text" | "video" | "photo" | "audio"; // T7.2b — photo/audio wired
   text?: string;
-  mediaKey?: string; // video — the R2 key from presignCaptureUpload
+  mediaKey?: string; // video/photo/audio — the R2 key from presignCaptureUpload
   displayOverride?: Partial<{ nameDisplay: NameDisplay; showFace: boolean }>;
 }): Promise<SubmitCaptureResult> {
   // Validate the payload per path (before consuming the token).
-  let proofType: "text" | "video";
+  let proofType: "text" | "video" | "photo" | "audio";
   let quote: string | null = null;
   let transcript: string | null = null;
   let mediaUrl: string | null = null;
@@ -114,19 +132,23 @@ export async function submitCapture(input: {
     }
     proofType = "text";
     quote = text; // testimony-verbatim — stored exactly as typed
-  } else if (input.path === "video") {
+  } else if (
+    input.path === "video" ||
+    input.path === "photo" ||
+    input.path === "audio"
+  ) {
     if (!input.mediaKey) {
-      return { status: "invalid", reason: "Record or upload a clip first." };
+      return { status: "invalid", reason: "Add your media first." };
     }
-    proofType = "video";
-    // No transcription in T7.2 (a later tier) → transcript null, like the fixtures.
+    // T7.2b — photo/audio REUSE the video media path verbatim: proofType tracks the path,
+    // no transcription (a later tier), and mediaUrl persists the raw captures-bucket KEY
+    // (T7.4a — never a public URL; the worker fetches by this key, photo resizes, audio
+    // skips). writeCapturedProof emits media.captured with proofType (generic).
+    proofType = input.path;
     transcript = null;
-    // T7.4a — persist the raw captures-bucket KEY (not a public URL). Matches schema.ts:
-    // mediaUrl is "the captured SOURCE-media R2 key". The worker fetches by this key; the
-    // only sanctioned read is a signed presignCaptureRead. assetUrlForKey is never used here.
     mediaUrl = input.mediaKey;
   } else {
-    return { status: "invalid", reason: "That option isn't available yet." };
+    return { status: "invalid", reason: "That option isn't available." };
   }
 
   // 1. Atomic single-use consume (a consumed/expired/unknown token yields null).

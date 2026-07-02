@@ -32,7 +32,9 @@ export function ProofDetailMedia({ proof }: { proof: ProofDetailView }) {
       </span>
       {proof.mediaUrl != null && (
         <span className="absolute bottom-3 right-3 rounded-pill bg-card/90 px-2.5 py-1 font-ui text-label uppercase tracking-wide text-ink-3">
-          video stored · playback coming
+          {/* T7.2b — honest per-type label (was hard-coded "video"); a photo/audio proof
+              now reads "photo/audio stored", not "video stored". */}
+          {proof.proofType} stored · playback coming
         </span>
       )}
     </div>

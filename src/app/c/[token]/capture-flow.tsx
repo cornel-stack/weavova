@@ -16,8 +16,8 @@ import {
 import { contrastOn, isHexColor } from "@/lib/brand-kit";
 import type { NameDisplay } from "@/lib/consent";
 import {
+  CAPTURE_ALLOWED_AUDIO_TYPES,
   CAPTURE_ALLOWED_VIDEO_TYPES,
-  type CaptureProofPath,
   type CaptureRequestView,
 } from "@/lib/capture";
 import { presignCaptureUpload, submitCapture } from "./actions";
@@ -36,12 +36,19 @@ import { presignCaptureUpload, submitCapture } from "./actions";
 type Screen =
   | "prompt"
   | "record"
+  | "audio" // T7.2b — audio recorder (mic + timer) → review
   | "review"
   | "write"
   | "consent"
   | "sending"
-  | "thanks"
-  | "coming";
+  | "thanks";
+
+// The face-bearing media paths — the consent "Show my face" control applies to these
+// (a video or a photo may show a face); text/audio have no face.
+type CapturePath = "text" | "video" | "photo" | "audio";
+function isFaceBearing(path: CapturePath): boolean {
+  return path === "video" || path === "photo";
+}
 
 const NAME_RANK: Record<NameDisplay, number> = {
   full: 0,
@@ -62,6 +69,13 @@ function pickVideoType(): string | null {
   }
   return null;
 }
+function pickAudioType(): string | null {
+  if (typeof MediaRecorder === "undefined") return null;
+  for (const t of CAPTURE_ALLOWED_AUDIO_TYPES) {
+    if (MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return null;
+}
 function baseType(mime: string): string {
   return mime.split(";")[0];
 }
@@ -78,7 +92,7 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
   );
   const [showFace, setShowFace] = useState<boolean>(request.display.showFace);
   const [consented, setConsented] = useState(false); // 04 — affirmative gate (P-VII)
-  const [path, setPath] = useState<"text" | "video">("text");
+  const [path, setPath] = useState<CapturePath>("text");
   const [clip, setClip] = useState<{ blob: Blob; url: string } | null>(null);
   const [mediaKey, setMediaKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -92,17 +106,14 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
   const ws = request.workspaceName;
   const primary = { backgroundColor: brandColor, color: onBrand } as const;
 
-  function choosePath(p: CaptureProofPath) {
+  // text/video/audio route here; photo is picker-driven from the prompt (opens the OS
+  // camera/gallery directly → review), so it never passes through choosePath.
+  function choosePath(p: "text" | "video" | "audio") {
     setError(null);
-    if (p === "text") {
-      setPath("text");
-      setScreen("write");
-    } else if (p === "video") {
-      setPath("video");
-      setScreen("record");
-    } else {
-      setScreen("coming"); // photo/audio — honest coming (T7.2b)
-    }
+    setPath(p);
+    if (p === "text") setScreen("write");
+    else if (p === "video") setScreen("record");
+    else setScreen("audio");
   }
 
   function onClipReady(blob: Blob) {
@@ -122,7 +133,11 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
     setError(null);
     setScreen("sending"); // brief "uploading" via the sending seam
     startTransition(async () => {
-      const contentType = baseType(clip.blob.type) || "video/webm";
+      // The blob's own type (file input → image/*, MediaRecorder → audio/video); fall back
+      // per path if a browser reports an empty type.
+      const fallbackType =
+        path === "photo" ? "image/jpeg" : path === "audio" ? "audio/webm" : "video/webm";
+      const contentType = baseType(clip.blob.type) || fallbackType;
       const signed = await presignCaptureUpload({
         token: request.token,
         contentType,
@@ -164,23 +179,27 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
         token: request.token,
         path,
         text: path === "text" ? text : undefined,
-        mediaKey: path === "video" ? (mediaKey ?? undefined) : undefined,
-        // video has a face → send name + face; text → name only (no face).
-        displayOverride:
-          path === "video" ? { nameDisplay, showFace } : { nameDisplay },
+        // any media path (video/photo/audio) sends the uploaded KEY.
+        mediaKey: path !== "text" ? (mediaKey ?? undefined) : undefined,
+        // face-bearing media (video/photo) → send name + face; text/audio → name only.
+        displayOverride: isFaceBearing(path)
+          ? { nameDisplay, showFace }
+          : { nameDisplay },
       });
+      // On error, return to the last editable screen: text → write; media → consent.
+      const backScreen: Screen = path === "text" ? "write" : "consent";
       if (res.status === "ok") {
         setScreen("thanks");
       } else if (res.status === "invalid") {
         setError(res.reason);
-        setScreen(path === "video" ? "consent" : "write");
+        setScreen(backScreen);
       } else {
         setError(
           res.status === "error"
             ? `We couldn't save that just now. Ask ${ws} for a fresh link.`
             : `This link is no longer open. Ask ${ws} for a new one.`,
         );
-        setScreen(path === "video" ? "consent" : "write");
+        setScreen(backScreen);
       }
     });
   }
@@ -190,6 +209,7 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
     return (
       <RecordScreen
         primary={primary}
+        brand={{ logoUrl: request.brand?.logoAssetUrl ?? null, ws }}
         onClip={onClipReady}
         onCancel={() => setScreen("prompt")}
         onWriteInstead={() => choosePath("text")}
@@ -197,12 +217,24 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
     );
   }
 
-  // Top-left back-chevron target (04/07 use it; the chevron replaces the bottom "Back" link).
+  // ── T7.2b: 02/03 pattern, AUDIO treatment (mic + timer, no video preview) → review ──
+  if (screen === "audio") {
+    return (
+      <AudioRecordScreen
+        primary={primary}
+        onClip={onClipReady}
+        onCancel={() => setScreen("prompt")}
+        onWriteInstead={() => choosePath("text")}
+      />
+    );
+  }
+
+  // Top-left back-chevron target (04/07 use it; the chevron replaces the bottom "Back").
   const headerBack =
     screen === "write"
       ? () => setScreen("prompt")
       : screen === "consent"
-        ? () => setScreen(path === "video" ? "review" : "write")
+        ? () => setScreen(path === "text" ? "write" : "review")
         : null;
   const showHeader =
     screen === "prompt" || screen === "write" || screen === "consent";
@@ -271,12 +303,26 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
                     wired={request.wiredPaths.includes("text")}
                     onClick={() => choosePath("text")}
                   />
-                  <PromptIconOption
-                    icon={ImageIcon}
-                    label="Add a photo"
-                    wired={request.wiredPaths.includes("photo")}
-                    onClick={() => choosePath("photo")}
-                  />
+                  {/* Photo opens the OS camera/gallery picker directly (native — no intake
+                      screen); the chosen file goes straight to review (screen 08). */}
+                  <label className="flex cursor-pointer items-center gap-2 rounded-control px-2 py-2 text-left transition-colors duration-200 ease-pressroom hover:bg-sunken focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ink">
+                    <ImageIcon className="size-5 shrink-0 text-ink-2" aria-hidden />
+                    <span className="font-ui text-body-sm text-ink-2">Add a photo</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setError(null);
+                          setPath("photo");
+                          onClipReady(file);
+                        }
+                      }}
+                    />
+                  </label>
                   <PromptIconOption
                     icon={Mic}
                     label="Record audio"
@@ -299,16 +345,36 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
                   Not sent yet &mdash; you can retake.
                 </p>
               </div>
-              {/* the customer reviews their OWN just-recorded clip (in-memory) — not a
-                  stored-proof player */}
+              {/* the customer reviews their OWN just-captured media (in-memory) — not a
+                  stored-proof player. video → <video>; photo (08) → <img>; audio → <audio>. */}
               <div className="flex flex-1 items-center py-5">
-                <video
-                  src={clip.url}
-                  data-theme="ink"
-                  controls
-                  playsInline
-                  className="aspect-[3/4] w-full rounded-clip bg-paper object-contain"
-                />
+                {path === "photo" ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={clip.url}
+                    alt="Your photo"
+                    className="aspect-[3/4] w-full rounded-clip bg-paper object-contain"
+                  />
+                ) : path === "audio" ? (
+                  <div className="flex w-full flex-col items-center gap-5 rounded-clip border border-hairline bg-card py-10">
+                    <span
+                      className="flex size-16 items-center justify-center rounded-pill"
+                      style={primary}
+                      aria-hidden
+                    >
+                      <Mic className="size-7" />
+                    </span>
+                    <audio src={clip.url} controls className="w-[85%]" />
+                  </div>
+                ) : (
+                  <video
+                    src={clip.url}
+                    data-theme="ink"
+                    controls
+                    playsInline
+                    className="aspect-[3/4] w-full rounded-clip bg-paper object-contain"
+                  />
+                )}
               </div>
               {error && (
                 <p role="alert" className="mb-3 font-ui text-body-sm text-danger">
@@ -430,10 +496,10 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
                   })}
                 </div>
 
-                {/* video has a FACE → the show-face control (more-private-only: if the
-                    workspace default hides the face, the customer can't re-show it). Text
-                    has no face, so this is omitted there. */}
-                {path === "video" && (
+                {/* face-bearing media (video/photo) → the show-face control (more-private-
+                    only: if the workspace default hides the face, the customer can't re-show
+                    it). Text/audio have no face, so this is omitted there. */}
+                {isFaceBearing(path) && (
                   <label
                     className={`mt-3 flex items-center gap-3 rounded-control border px-4 py-2.5 font-ui text-body-sm ${
                       request.display.showFace
@@ -516,24 +582,6 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
             </section>
           )}
 
-          {/* honest "coming" state for photo/audio (P-XIII — not a dead control) */}
-          {screen === "coming" && (
-            <section className="flex flex-1 flex-col justify-center text-center">
-              <h1 className="font-display text-display-md text-ink">Coming soon.</h1>
-              <p className="mt-3 font-ui text-body text-ink-2">
-                Photo and audio capture are on the way. For now, record a quick video or
-                write a few words.
-              </p>
-              <button
-                type="button"
-                onClick={() => setScreen("prompt")}
-                style={primary}
-                className="mt-7 w-full rounded-control px-5 py-3.5 font-ui text-body font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-              >
-                Back
-              </button>
-            </section>
-          )}
         </div>
 
         <footer className="py-4 text-center">
@@ -555,11 +603,13 @@ export function CaptureFlow({ request }: { request: CaptureRequestView }) {
 // screen-09 "camera blocked" plugs into at T7.2b). Records → review only (No-Editor).
 function RecordScreen({
   primary,
+  brand,
   onClip,
   onCancel,
   onWriteInstead,
 }: {
   primary: { backgroundColor: string; color: string };
+  brand: { logoUrl: string | null; ws: string };
   onClip: (blob: Blob) => void;
   onCancel: () => void;
   onWriteInstead: () => void;
@@ -637,11 +687,13 @@ function RecordScreen({
   const mmss = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
 
   if (fallback) {
-    // Minimal camera-unavailable fallback (the polished screen-09 is T7.2b).
+    // PORT: 09 _ Camera blocked — the polished getUserMedia-unavailable fallback. Verbatim
+    // copy, brand-marked header, upload-from-gallery + write-instead (both real). The capture
+    // fallback BEHAVIOR is unchanged from the spine; this is the designed surface over it.
     return (
       <main className="flex min-h-dvh flex-col items-center bg-paper px-6 py-8">
         <div className="flex w-full max-w-[440px] flex-1 flex-col">
-          <header className="flex items-center py-4">
+          <header className="flex items-center gap-2 py-4">
             <button
               type="button"
               onClick={onCancel}
@@ -650,6 +702,22 @@ function RecordScreen({
             >
               <ChevronLeft className="size-5" aria-hidden />
             </button>
+            {brand.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={brand.logoUrl}
+                alt={brand.ws}
+                className="h-10 max-w-[160px] object-contain"
+              />
+            ) : (
+              <span
+                className="flex size-10 items-center justify-center rounded-control font-display text-display-xs"
+                style={primary}
+                aria-hidden
+              >
+                {brand.ws.charAt(0)}
+              </span>
+            )}
           </header>
           <section className="flex flex-1 flex-col text-center">
             <div className="pt-6">
@@ -657,7 +725,8 @@ function RecordScreen({
                 No camera? No problem.
               </h1>
               <p className="mt-3 font-ui text-body text-ink-2">
-                Upload a clip from your gallery, or write a few words instead.
+                We couldn&rsquo;t reach your camera. You can upload a clip from your
+                gallery, or just write a few words instead.
               </p>
             </div>
             <div className="mt-auto pt-8">
@@ -741,6 +810,203 @@ function RecordScreen({
             aria-hidden
           />
         </button>
+      </div>
+    </main>
+  );
+}
+
+// ── T7.2b: AUDIO recorder — the 02/03 recording/review pattern, audio treatment ──────
+// Mirrors RecordScreen's capture lifecycle (getUserMedia → MediaRecorder → onstop → onClip)
+// but AUDIO-ONLY: no video preview, a paper-framed screen with a big mic + a running timer +
+// the circular record control. Falls back to a file upload if mic/MediaRecorder is
+// unavailable/denied (no dead end). Records → review only (No-Editor).
+function AudioRecordScreen({
+  primary,
+  onClip,
+  onCancel,
+  onWriteInstead,
+}: {
+  primary: { backgroundColor: string; color: string };
+  onClip: (blob: Blob) => void;
+  onCancel: () => void;
+  onWriteInstead: () => void;
+}) {
+  const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const [recording, setRecording] = useState(false);
+  const [fallback, setFallback] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const mime = pickAudioType();
+    if (
+      mime == null ||
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
+      setFallback(true);
+      return;
+    }
+    navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        setReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) setFallback(true); // permission denied / no mic → fallback
+      });
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!recording) return;
+    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(id);
+  }, [recording]);
+
+  function start() {
+    const stream = streamRef.current;
+    const mime = pickAudioType();
+    if (!stream || !mime) {
+      setFallback(true);
+      return;
+    }
+    chunksRef.current = [];
+    const rec = new MediaRecorder(stream, { mimeType: mime });
+    rec.ondataavailable = (e) => {
+      if (e.data.size > 0) chunksRef.current.push(e.data);
+    };
+    rec.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: mime });
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      onClip(blob);
+    };
+    recorderRef.current = rec;
+    rec.start();
+    setElapsed(0);
+    setRecording(true);
+  }
+  function stop() {
+    recorderRef.current?.stop();
+    setRecording(false);
+  }
+
+  const mmss = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
+
+  return (
+    <main className="flex min-h-dvh flex-col items-center bg-paper px-6 py-8">
+      <div className="flex w-full max-w-[440px] flex-1 flex-col">
+        <header className="flex items-center py-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            aria-label="Back"
+            className="-ml-2 flex size-9 items-center justify-center rounded-pill text-ink-2 transition-colors duration-200 ease-pressroom hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+          >
+            <ChevronLeft className="size-5" aria-hidden />
+          </button>
+        </header>
+
+        {fallback ? (
+          <section className="flex flex-1 flex-col text-center">
+            <div className="pt-6">
+              <h1 className="font-display text-display-md text-ink">
+                No microphone? No problem.
+              </h1>
+              <p className="mt-3 font-ui text-body text-ink-2">
+                Upload an audio clip from your device, or write a few words instead.
+              </p>
+            </div>
+            <div className="mt-auto pt-8">
+              <label
+                style={primary}
+                className="block w-full cursor-pointer rounded-control px-5 py-4 text-center font-ui text-body font-medium focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ink"
+              >
+                Upload audio
+                <input
+                  type="file"
+                  accept="audio/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) onClip(file);
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={onWriteInstead}
+                className="mt-3 w-full rounded-control border border-rule bg-card px-5 py-3 font-ui text-body-sm font-medium text-ink hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+              >
+                Write it instead
+              </button>
+            </div>
+          </section>
+        ) : (
+          <section className="flex flex-1 flex-col items-center text-center">
+            <div className="pt-6">
+              <h1 className="font-display text-display-md text-ink">
+                {recording ? "Listening…" : "Record audio."}
+              </h1>
+              <p className="mt-3 font-ui text-body text-ink-2">
+                A few honest words. Takes about 20 seconds.
+              </p>
+            </div>
+
+            <span
+              className="mt-10 flex size-24 items-center justify-center rounded-pill"
+              style={primary}
+              aria-hidden
+            >
+              <Mic className="size-10" />
+            </span>
+            <span className="mt-6 flex items-center gap-2 rounded-pill bg-sunken px-3 py-1 font-mono text-mono-sm text-ink-2">
+              {recording && <span className="size-2 rounded-pill bg-danger" aria-hidden />}
+              {mmss}
+            </span>
+
+            <div className="mt-auto w-full pt-8">
+              <button
+                type="button"
+                onClick={recording ? stop : start}
+                disabled={!ready && !recording}
+                aria-label={recording ? "Stop recording" : "Start recording"}
+                style={recording ? undefined : primary}
+                className={
+                  recording
+                    ? "flex w-full items-center justify-center gap-2 rounded-control border border-rule bg-card px-5 py-3.5 font-ui text-body font-medium text-ink transition-colors duration-200 ease-pressroom hover:bg-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                    : "flex w-full items-center justify-center gap-2 rounded-control px-5 py-3.5 font-ui text-body font-medium transition-opacity duration-200 ease-pressroom hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                }
+              >
+                {recording ? "Stop" : "Start recording"}
+              </button>
+              <button
+                type="button"
+                onClick={onWriteInstead}
+                className="mt-3 w-full rounded-control px-5 py-3 font-ui text-body-sm text-ink-3 transition-colors duration-200 ease-pressroom hover:text-ink-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+              >
+                Write it instead
+              </button>
+            </div>
+          </section>
+        )}
+
+        <footer className="py-4 text-center">
+          <span className="font-ui text-label uppercase tracking-wide text-ink-3">
+            powered by Weavova
+          </span>
+        </footer>
       </div>
     </main>
   );
